@@ -518,7 +518,6 @@ function buildDockerContainerSpec(session, app, labels, env) {
     Labels: labels,
     HostConfig: {
       AutoRemove: false,
-      Init: true,
       NetworkMode: config.sessionNetwork,
       ReadonlyRootfs: true,
       Memory: Math.max(128, Number(app.resources.memoryMb || config.defaultMemoryMb)) * 1024 * 1024,
@@ -531,6 +530,7 @@ function buildDockerContainerSpec(session, app, labels, env) {
         "/run": "rw,nosuid,nodev,size=67108864",
         "/data": "rw,nosuid,nodev,size=536870912",
       },
+      CapAdd: ["CHOWN", "SETUID", "SETGID"],
       CapDrop: ["ALL"],
       SecurityOpt: ["no-new-privileges:true"],
     },
@@ -625,6 +625,7 @@ function buildKubernetesPodSpec(session, app, labels, env) {
             allowPrivilegeEscalation: false,
             readOnlyRootFilesystem: true,
             capabilities: {
+              add: ["CHOWN", "SETUID", "SETGID"],
               drop: ["ALL"],
             },
           },
