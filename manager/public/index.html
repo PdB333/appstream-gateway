@@ -96,6 +96,11 @@
       color: var(--ink);
       border: 1px solid var(--line);
     }
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+      transform: none;
+    }
 
     .app-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
     .app-card {
@@ -152,6 +157,14 @@
       padding: 10px 12px;
       border-radius: 14px;
       background: rgba(53, 34, 14, 0.06);
+    }
+    .notice.success {
+      background: rgba(40, 109, 52, 0.12);
+      color: #2c6d34;
+    }
+    .notice.error {
+      background: rgba(157, 45, 27, 0.12);
+      color: #8d2416;
     }
     .log-box {
       max-height: 360px;
@@ -212,6 +225,7 @@
           <a href="/metrics" target="_blank" rel="noreferrer">Prometheus metrics</a>
         </div>
         <div id="metaNotice" class="notice muted">Loading manager metadata...</div>
+        <div id="actionNotice" class="notice muted">Ready.</div>
       </div>
 
       <div class="stack">
@@ -360,6 +374,7 @@
     const adminTokenInput = document.getElementById("adminToken");
     const clientIdInput = document.getElementById("clientId");
     const metaNotice = document.getElementById("metaNotice");
+    const actionNotice = document.getElementById("actionNotice");
     const overviewCards = document.getElementById("overviewCards");
     const catalogApps = document.getElementById("catalogApps");
     const sessionsTable = document.getElementById("sessionsTable");
@@ -436,6 +451,15 @@
       document.getElementById("customForm").hidden = !state.meta.allowCustomApps;
     }
 
+    function setActionNotice(message, tone = "muted", allowHtml = false) {
+      actionNotice.className = `notice ${tone}`;
+      if (allowHtml) {
+        actionNotice.innerHTML = message;
+        return;
+      }
+      actionNotice.textContent = message;
+    }
+
     function renderOverview() {
       const metrics = state.overview?.metrics || {};
       const cards = [
@@ -482,6 +506,7 @@
 
     function renderApps() {
       const apps = getFilteredApps();
+      const launchLocked = Boolean(state.meta?.adminRequired && !state.adminToken);
       if (apps.length === 0) {
         catalogApps.innerHTML = '<div class="notice muted">No applications match the current filter.</div>';
         return;
@@ -509,7 +534,7 @@
           </div>
           <div class="muted">CPU: ${app.resources.cpuCores} | RAM: ${app.resources.memoryMb}MB | Resume: ${app.session.resume ? "yes" : "no"}</div>
           <div class="row">
-            <button data-launch="${escapeHtml(app.id)}">${app.session.resume ? "Open / Resume" : "Launch"}</button>
+            <button data-launch="${escapeHtml(app.id)}" ${launchLocked ? 'disabled title="Enter the admin token first"' : ""}>${app.session.resume ? "Open / Resume" : "Launch"}</button>
           </div>
         `;
         catalogApps.appendChild(card);
@@ -595,20 +620,57 @@
       }
     }
 
+    function createPendingWindow() {
+      const popup = window.open("", "_blank");
+      if (!popup) {
+        return null;
+      }
+
+      try {
+        popup.document.title = "Launching session";
+        popup.document.body.innerHTML = "<p style=\"font-family: sans-serif; padding: 24px;\">Launching session...</p>";
+      } catch {}
+
+      return popup;
+    }
+
     async function createSession(payload) {
+      const popup = createPendingWindow();
+
       if (state.meta?.adminRequired && !state.adminToken) {
+        if (popup && !popup.closed) {
+          popup.close();
+        }
+        setActionNotice("Enter the admin token and click Save access before launching a session.", "error");
         diagnosticsSummary.textContent = "An admin token is required to create sessions.";
         return;
       }
+
+      setActionNotice(`Launching ${(payload.app && payload.app.name) || payload.appId || "session"}...`);
 
       try {
         const session = await api("/api/sessions", {
           method: "POST",
           body: JSON.stringify(payload),
         });
-        window.open(session.url, "_blank", "noopener");
+        if (popup && !popup.closed) {
+          popup.location.replace(session.url);
+          try {
+            popup.opener = null;
+          } catch {}
+        } else {
+          setActionNotice(
+            `Session ready. <a href="${escapeHtml(session.url)}" target="_blank" rel="noreferrer">Open session</a>`,
+            "success",
+            true
+          );
+        }
         await refreshData();
       } catch (error) {
+        if (popup && !popup.closed) {
+          popup.close();
+        }
+        setActionNotice(error.message, "error");
         diagnosticsSummary.textContent = error.message;
       }
     }
@@ -760,6 +822,7 @@
       localStorage.setItem("appWebAdminToken", state.adminToken);
       localStorage.setItem("appWebClientId", state.clientId);
       clientIdInput.value = state.clientId;
+      setActionNotice("Access settings saved.", "success");
       refreshData();
     });
 
