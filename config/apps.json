@@ -1,0 +1,95 @@
+[
+  {
+    "id": "xterm",
+    "name": "Terminal",
+    "description": "Browser-accessible diagnostic terminal running inside an isolated desktop session.",
+    "featured": true,
+    "categories": ["debug", "utility"],
+    "tags": ["shell", "x11"],
+    "source": {
+      "type": "command",
+      "command": "xterm -fa 'DejaVu Sans Mono' -fs 11"
+    },
+    "launch": {
+      "args": "",
+      "extractAndRun": false,
+      "workingDirectory": "/data/home",
+      "healthcheckPath": "/"
+    },
+    "resources": {
+      "cpuCores": 0.5,
+      "memoryMb": 512
+    },
+    "display": {
+      "width": 1280,
+      "height": 800,
+      "depth": 24
+    },
+    "storage": {
+      "mode": "per-client"
+    },
+    "session": {
+      "resume": true
+    }
+  },
+  {
+    "id": "xclock",
+    "name": "XClock",
+    "description": "Smoke-test application for validating the X11/noVNC stack.",
+    "categories": ["demo", "utility"],
+    "tags": ["smoke-test", "clock"],
+    "source": {
+      "type": "command",
+      "command": "xclock -update 1"
+    },
+    "launch": {
+      "args": "",
+      "extractAndRun": false
+    },
+    "resources": {
+      "cpuCores": 0.25,
+      "memoryMb": 256
+    },
+    "display": {
+      "width": 1024,
+      "height": 768,
+      "depth": 24
+    },
+    "storage": {
+      "mode": "ephemeral"
+    },
+    "session": {
+      "resume": false
+    }
+  },
+  {
+    "id": "xeyes",
+    "name": "XEyes",
+    "description": "Simple X11 demo app useful to validate pointer and refresh behaviour.",
+    "categories": ["demo"],
+    "tags": ["pointer", "x11"],
+    "source": {
+      "type": "command",
+      "command": "xeyes"
+    },
+    "launch": {
+      "args": "",
+      "extractAndRun": false
+    },
+    "resources": {
+      "cpuCores": 0.25,
+      "memoryMb": 256
+    },
+    "display": {
+      "width": 1024,
+      "height": 768,
+      "depth": 24
+    },
+    "storage": {
+      "mode": "ephemeral"
+    },
+    "session": {
+      "resume": true
+    }
+  }
+]

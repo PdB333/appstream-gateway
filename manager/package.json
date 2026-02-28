@@ -1,0 +1,9 @@
+{
+  "name": "app-web-manager",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js"
+  }
+}

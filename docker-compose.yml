@@ -1,0 +1,61 @@
+version: "3.9"
+
+services:
+  session-template:
+    build:
+      context: .
+    image: ${SESSION_IMAGE:-local/app-web-session:latest}
+    command: ["/bin/sh", "-lc", "echo session image ready"]
+    restart: "no"
+    networks:
+      - app-web-sessions
+
+  manager:
+    build:
+      context: ./manager
+    image: ${MANAGER_IMAGE:-local/app-web-manager:latest}
+    depends_on:
+      - session-template
+    environment:
+      PORT: 3000
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      APP_CATALOG_PATH: /app/config/apps.json
+      SESSION_BACKEND: ${SESSION_BACKEND:-docker}
+      SESSION_IMAGE: ${SESSION_IMAGE:-local/app-web-session:latest}
+      SESSION_NETWORK: ${SESSION_NETWORK:-app-web-sessions}
+      SESSION_CACHE_VOLUME: ${SESSION_CACHE_VOLUME:-app-web-cache}
+      SESSION_SECRET: ${SESSION_SECRET:-change-this-before-prod}
+      ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-}
+      ALLOW_CUSTOM_APPS: ${ALLOW_CUSTOM_APPS:-false}
+      SECURE_COOKIES: ${SECURE_COOKIES:-false}
+      DEFAULT_SESSION_TTL: ${DEFAULT_SESSION_TTL:-2h}
+      SESSION_READY_TIMEOUT: ${SESSION_READY_TIMEOUT:-90s}
+      REAPER_INTERVAL: ${REAPER_INTERVAL:-30s}
+      SESSION_LOG_TAIL: ${SESSION_LOG_TAIL:-200}
+      MAX_MANAGER_EVENTS: ${MAX_MANAGER_EVENTS:-300}
+      MAX_SESSION_EVENTS: ${MAX_SESSION_EVENTS:-120}
+      DEFAULT_STORAGE_MODE: ${DEFAULT_STORAGE_MODE:-ephemeral}
+      RESUME_SESSIONS: ${RESUME_SESSIONS:-true}
+    ports:
+      - "${PORT:-3000}:3000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./config:/app/config:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - app-web-sessions
+
+networks:
+  app-web-sessions:
+    name: ${SESSION_NETWORK:-app-web-sessions}
+
+volumes:
+  app-web-cache:
+    name: ${SESSION_CACHE_VOLUME:-app-web-cache}

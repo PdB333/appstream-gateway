@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: app-web-session-ingress
+  namespace: app-web
+spec:
+  podSelector:
+    matchLabels:
+      appweb.managed: "true"
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: app-web-manager
+      ports:
+        - protocol: TCP
+          port: 8080

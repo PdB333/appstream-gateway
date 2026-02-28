@@ -1,0 +1,113 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-web-manager
+  namespace: app-web
+  labels:
+    app.kubernetes.io/name: app-web-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: app-web-manager
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: app-web-manager
+    spec:
+      serviceAccountName: app-web-manager
+      containers:
+        - name: manager
+          image: ghcr.io/your-org/app-web-manager:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+              name: http
+          env:
+            - name: PORT
+              value: "3000"
+            - name: PUBLIC_BASE_URL
+              value: "https://app-web.example.com"
+            - name: APP_CATALOG_PATH
+              value: /app/config/apps.json
+            - name: SESSION_BACKEND
+              value: kubernetes
+            - name: SESSION_IMAGE
+              value: ghcr.io/your-org/app-web-session:latest
+            - name: K8S_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: K8S_SESSION_POD_SERVICE_ACCOUNT
+              value: app-web-session
+            - name: K8S_SESSION_IMAGE_PULL_POLICY
+              value: IfNotPresent
+            - name: K8S_SESSION_CACHE_CLAIM
+              value: app-web-session-cache
+            - name: K8S_SESSION_HOME_CLAIM
+              value: app-web-session-home
+            - name: ALLOW_CUSTOM_APPS
+              value: "false"
+            - name: SECURE_COOKIES
+              value: "true"
+            - name: DEFAULT_SESSION_TTL
+              value: 2h
+            - name: SESSION_READY_TIMEOUT
+              value: 90s
+            - name: REAPER_INTERVAL
+              value: 30s
+            - name: SESSION_LOG_TAIL
+              value: "200"
+            - name: MAX_MANAGER_EVENTS
+              value: "300"
+            - name: MAX_SESSION_EVENTS
+              value: "120"
+            - name: DEFAULT_STORAGE_MODE
+              value: ephemeral
+            - name: RESUME_SESSIONS
+              value: "true"
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: app-web-secrets
+                  key: SESSION_SECRET
+            - name: ADMIN_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: app-web-secrets
+                  key: ADMIN_API_TOKEN
+          volumeMounts:
+            - name: catalog
+              mountPath: /app/config
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: catalog
+          configMap:
+            name: app-web-catalog
+        - name: tmp
+          emptyDir: {}

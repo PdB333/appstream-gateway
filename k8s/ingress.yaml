@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: app-web-manager
+  namespace: app-web
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: app-web.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: app-web-manager
+                port:
+                  name: http

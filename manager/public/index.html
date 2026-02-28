@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>app-web manager</title>
+  <style>
+    :root {
+      --bg: #efe8dc;
+      --panel: rgba(255, 252, 247, 0.92);
+      --line: rgba(52, 39, 20, 0.12);
+      --ink: #1e160d;
+      --muted: #6f6250;
+      --accent: #b24b17;
+      --accent-2: #0b6f68;
+      --danger: #9d2d1b;
+      --chip: rgba(178, 75, 23, 0.09);
+      --shadow: 0 24px 60px rgba(65, 34, 0, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top left, rgba(215, 128, 56, 0.22), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(11, 111, 104, 0.12), transparent 22%),
+        linear-gradient(135deg, #f5efe6, #ebe2d4 48%, #e9dfd2);
+      color: var(--ink);
+      font-family: "Segoe UI", "Helvetica Neue", sans-serif;
+      padding: 20px;
+    }
+
+    .shell { max-width: 1280px; margin: 0 auto; display: grid; gap: 16px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(14px);
+      padding: 18px;
+    }
+
+    .hero h1, h2, h3 {
+      margin: 0;
+      font-family: Georgia, "Times New Roman", serif;
+    }
+
+    .hero h1 { font-size: clamp(2rem, 4vw, 3.3rem); }
+    .muted { color: var(--muted); }
+    .grid { display: grid; gap: 16px; }
+    .two { grid-template-columns: 1.3fr 0.9fr; }
+    .three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .stack { display: grid; gap: 12px; }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .split { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+    .cards { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+
+    .metric {
+      padding: 14px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.62);
+    }
+    .metric strong { display: block; font-size: 1.5rem; }
+
+    .field { display: grid; gap: 6px; }
+    input, select, textarea, button {
+      font: inherit;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(58, 41, 20, 0.16);
+      background: rgba(255, 255, 255, 0.82);
+      color: var(--ink);
+    }
+    textarea { min-height: 92px; resize: vertical; }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 15px;
+      cursor: pointer;
+      color: #fff8f3;
+      background: var(--accent);
+      transition: transform 120ms ease, background 120ms ease;
+    }
+    button:hover { transform: translateY(-1px); }
+    button.secondary { background: rgba(53, 34, 14, 0.1); color: var(--ink); }
+    button.alt { background: var(--accent-2); }
+    button.danger { background: var(--danger); }
+    button.ghost {
+      background: transparent;
+      color: var(--ink);
+      border: 1px solid var(--line);
+    }
+
+    .app-grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+    .app-card {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 14px;
+      background: rgba(255, 255, 255, 0.6);
+      display: grid;
+      gap: 10px;
+    }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: var(--chip);
+      color: #7c3710;
+      font-size: 0.85rem;
+    }
+    .chip.tag { background: rgba(11, 111, 104, 0.1); color: #0e6059; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 0.82rem;
+    }
+    .badge.ready { background: rgba(40, 109, 52, 0.12); color: #2c6d34; }
+    .badge.starting { background: rgba(163, 112, 0, 0.15); color: #7f5b00; }
+    .badge.stopped, .badge.deleted, .badge.exited { background: rgba(157, 45, 27, 0.12); color: #8d2416; }
+    .favorite { color: #b24b17; font-weight: 700; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.95rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: Consolas, "Courier New", monospace;
+      font-size: 0.9rem;
+      color: #2e261c;
+    }
+    .notice {
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: rgba(53, 34, 14, 0.06);
+    }
+    .log-box {
+      max-height: 360px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.75);
+    }
+
+    @media (max-width: 1024px) {
+      .two, .three { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 720px) {
+      body { padding: 12px; }
+      table, thead, tbody, th, td, tr { display: block; }
+      thead { display: none; }
+      td { border: none; padding: 6px 0; }
+      tr { border-bottom: 1px solid var(--line); padding: 8px 0; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <section class="panel hero stack">
+      <div class="split">
+        <div class="stack">
+          <h1>app-web manager</h1>
+          <div class="muted">
+            Multi-session browser delivery for desktop apps with metrics, diagnostics, favorites and resumable sessions.
+          </div>
+        </div>
+        <div class="chip-row">
+          <span class="chip">noVNC</span>
+          <span class="chip">Prometheus</span>
+          <span class="chip tag">AppImage</span>
+          <span class="chip tag">Archives</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel grid two">
+      <div class="stack">
+        <h2>Access</h2>
+        <div class="row">
+          <div class="field" style="flex: 1 1 260px;">
+            <label for="adminToken">Admin token</label>
+            <input id="adminToken" type="password" placeholder="Needed when ADMIN_API_TOKEN is set">
+          </div>
+          <div class="field" style="flex: 1 1 260px;">
+            <label for="clientId">Client ID</label>
+            <input id="clientId" type="text">
+          </div>
+        </div>
+        <div class="row">
+          <button id="saveAccess" class="secondary">Save access</button>
+          <button id="refreshAll" class="secondary">Refresh</button>
+          <a href="/metrics" target="_blank" rel="noreferrer">Prometheus metrics</a>
+        </div>
+        <div id="metaNotice" class="notice muted">Loading manager metadata...</div>
+      </div>
+
+      <div class="stack">
+        <h2>Overview</h2>
+        <div id="overviewCards" class="cards"></div>
+      </div>
+    </section>
+
+    <section class="panel stack">
+      <div class="split">
+        <h2>Application Catalog</h2>
+        <div class="row">
+          <input id="searchApps" type="search" placeholder="Search apps, tags, categories" style="min-width: 260px;">
+          <label class="row"><input id="favoritesOnly" type="checkbox"> Favorites only</label>
+        </div>
+      </div>
+      <div id="catalogApps" class="app-grid"></div>
+    </section>
+
+    <section class="panel grid two">
+      <div class="stack">
+        <h2>Custom Launch</h2>
+        <div id="customDisabled" class="notice muted">
+          Custom apps are disabled. Set <code>ALLOW_CUSTOM_APPS=true</code> to enable ad-hoc launches.
+        </div>
+        <div id="customForm" class="stack" hidden>
+          <div class="row">
+            <div class="field" style="flex: 1 1 180px;">
+              <label for="customName">Name</label>
+              <input id="customName" type="text" value="Custom app">
+            </div>
+            <div class="field" style="flex: 1 1 180px;">
+              <label for="customSourceType">Source type</label>
+              <select id="customSourceType">
+                <option value="appimage-url">AppImage URL</option>
+                <option value="archive-url">Archive URL</option>
+                <option value="binary-path">Binary path</option>
+                <option value="appimage-file">AppImage file path</option>
+                <option value="command">Command</option>
+              </select>
+            </div>
+            <div class="field" style="flex: 1 1 180px;">
+              <label for="customStorageMode">Storage</label>
+              <select id="customStorageMode">
+                <option value="per-client">Per client</option>
+                <option value="ephemeral">Ephemeral</option>
+                <option value="shared-app">Shared app</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" id="customUrlField">
+            <label for="customUrl">URL</label>
+            <input id="customUrl" type="url" placeholder="https://example.invalid/app.AppImage">
+          </div>
+          <div class="field" id="customPathField" hidden>
+            <label for="customPath">Path in image/container</label>
+            <input id="customPath" type="text" placeholder="/opt/app/appimage.AppImage">
+          </div>
+          <div class="field" id="customCommandField" hidden>
+            <label for="customCommand">Command</label>
+            <input id="customCommand" type="text" placeholder="xterm -fa 'DejaVu Sans Mono'">
+          </div>
+          <div class="field" id="customArchiveEntrypointField" hidden>
+            <label for="customArchiveEntrypoint">Archive entrypoint</label>
+            <input id="customArchiveEntrypoint" type="text" placeholder="bin/start.sh">
+          </div>
+          <div class="row">
+            <div class="field" style="flex: 1 1 180px;">
+              <label for="customArgs">Args</label>
+              <input id="customArgs" type="text" placeholder="--no-sandbox">
+            </div>
+            <div class="field" style="flex: 1 1 180px;">
+              <label for="customWorkdir">Working directory</label>
+              <input id="customWorkdir" type="text" placeholder="/opt/app">
+            </div>
+          </div>
+          <div class="row">
+            <div class="field" style="flex: 1 1 180px;">
+              <label for="customSha">SHA256 checksum</label>
+              <input id="customSha" type="text" placeholder="Optional">
+            </div>
+            <div class="field" style="flex: 1 1 180px;">
+              <label for="customPreLaunch">Pre-launch command</label>
+              <input id="customPreLaunch" type="text" placeholder="export FOO=bar">
+            </div>
+          </div>
+          <button id="launchCustom" class="alt">Launch custom app</button>
+        </div>
+      </div>
+
+      <div class="stack">
+        <h2>Manager Events</h2>
+        <div class="log-box"><pre id="managerEvents">No events loaded.</pre></div>
+      </div>
+    </section>
+
+    <section class="panel stack">
+      <div class="split">
+        <h2>Sessions</h2>
+        <label class="row"><input id="mineOnly" type="checkbox"> Only mine</label>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>App</th>
+            <th>Status</th>
+            <th>Timing</th>
+            <th>Storage</th>
+            <th>Details</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="sessionsTable"></tbody>
+      </table>
+    </section>
+
+    <section class="panel grid two">
+      <div class="stack">
+        <h2>Diagnostics</h2>
+        <div id="diagnosticsSummary" class="notice muted">Select a session to inspect logs, events and runtime stats.</div>
+        <div class="log-box"><pre id="diagnosticsEvents"></pre></div>
+      </div>
+      <div class="stack">
+        <h2>Session Logs</h2>
+        <div class="log-box"><pre id="diagnosticsLogs"></pre></div>
+      </div>
+    </section>
+  </main>
+
+  <script type="module">
+    const state = {
+      adminToken: localStorage.getItem("appWebAdminToken") || "",
+      clientId: localStorage.getItem("appWebClientId") || (crypto.randomUUID ? crypto.randomUUID() : `client-${Date.now()}`),
+      favorites: new Set(JSON.parse(localStorage.getItem("appWebFavorites") || "[]")),
+      meta: null,
+      overview: null,
+      apps: [],
+      sessions: [],
+      diagnostics: null,
+      selectedSessionId: "",
+      search: "",
+      favoritesOnly: false,
+      mineOnly: false,
+    };
+
+    const adminTokenInput = document.getElementById("adminToken");
+    const clientIdInput = document.getElementById("clientId");
+    const metaNotice = document.getElementById("metaNotice");
+    const overviewCards = document.getElementById("overviewCards");
+    const catalogApps = document.getElementById("catalogApps");
+    const sessionsTable = document.getElementById("sessionsTable");
+    const managerEvents = document.getElementById("managerEvents");
+    const diagnosticsSummary = document.getElementById("diagnosticsSummary");
+    const diagnosticsEvents = document.getElementById("diagnosticsEvents");
+    const diagnosticsLogs = document.getElementById("diagnosticsLogs");
+
+    adminTokenInput.value = state.adminToken;
+    clientIdInput.value = state.clientId;
+    localStorage.setItem("appWebClientId", state.clientId);
+
+    function saveFavorites() {
+      localStorage.setItem("appWebFavorites", JSON.stringify([...state.favorites]));
+    }
+
+    function apiHeaders(extra = {}) {
+      const headers = {
+        "x-appweb-client-id": state.clientId,
+        ...extra,
+      };
+      if (state.adminToken) {
+        headers.authorization = `Bearer ${state.adminToken}`;
+      }
+      return headers;
+    }
+
+    async function api(targetPath, options = {}) {
+      const headers = apiHeaders(options.headers || {});
+      if (options.body && !headers["content-type"]) {
+        headers["content-type"] = "application/json";
+      }
+
+      const response = await fetch(targetPath, {
+        ...options,
+        headers,
+      });
+
+      let body = {};
+      try {
+        body = await response.json();
+      } catch {
+        body = {};
+      }
+
+      if (!response.ok) {
+        throw new Error(body.error || `Request failed with status ${response.status}`);
+      }
+
+      return body;
+    }
+
+    function renderMeta() {
+      if (!state.meta) {
+        return;
+      }
+
+      const lines = [
+        state.meta.adminRequired
+          ? "Admin APIs require a bearer token."
+          : "Admin APIs are open because ADMIN_API_TOKEN is not set.",
+        `Backend: ${state.meta.sessionBackend}`,
+        state.meta.allowCustomApps
+          ? "Custom launches are enabled."
+          : "Custom launches are disabled.",
+        state.meta.resumeSessions
+          ? "Session resume is enabled."
+          : "Session resume is disabled.",
+        `Base URL: ${state.meta.publicBaseUrl}`,
+      ];
+
+      metaNotice.textContent = lines.join(" ");
+      document.getElementById("customDisabled").hidden = Boolean(state.meta.allowCustomApps);
+      document.getElementById("customForm").hidden = !state.meta.allowCustomApps;
+    }
+
+    function renderOverview() {
+      const metrics = state.overview?.metrics || {};
+      const cards = [
+        ["Active sessions", metrics.activeSessions ?? 0],
+        ["Created", metrics.sessionsCreatedTotal ?? 0],
+        ["Reused", metrics.sessionsReusedTotal ?? 0],
+        ["Failed", metrics.sessionsFailedTotal ?? 0],
+        ["Avg launch (ms)", metrics.averageLaunchDurationMs ?? 0],
+      ];
+
+      overviewCards.innerHTML = cards.map(([label, value]) => `
+        <article class="metric">
+          <span class="muted">${escapeHtml(label)}</span>
+          <strong>${escapeHtml(String(value))}</strong>
+        </article>
+      `).join("");
+
+      const events = (state.overview?.managerEvents || []).map((event) =>
+        `${event.ts} ${event.level} ${event.event} ${event.sessionId || ""} ${event.message || ""}`.trim()
+      );
+      managerEvents.textContent = events.length > 0 ? events.join("\n") : "No manager events yet.";
+    }
+
+    function getFilteredApps() {
+      const query = state.search.trim().toLowerCase();
+      return state.apps.filter((app) => {
+        if (state.favoritesOnly && !state.favorites.has(app.id)) {
+          return false;
+        }
+        if (!query) {
+          return true;
+        }
+
+        const haystack = [
+          app.name,
+          app.description,
+          ...(app.categories || []),
+          ...(app.tags || []),
+          app.sourceType,
+        ].join(" ").toLowerCase();
+        return haystack.includes(query);
+      });
+    }
+
+    function renderApps() {
+      const apps = getFilteredApps();
+      if (apps.length === 0) {
+        catalogApps.innerHTML = '<div class="notice muted">No applications match the current filter.</div>';
+        return;
+      }
+
+      catalogApps.innerHTML = "";
+      for (const app of apps) {
+        const card = document.createElement("article");
+        card.className = "app-card";
+        const isFavorite = state.favorites.has(app.id);
+        card.innerHTML = `
+          <div class="split">
+            <div>
+              <strong>${escapeHtml(app.name)}</strong>
+              <div class="muted">${escapeHtml(app.description || "No description")}</div>
+            </div>
+            <button class="ghost ${isFavorite ? "favorite" : ""}" data-favorite="${escapeHtml(app.id)}">${isFavorite ? "★" : "☆"}</button>
+          </div>
+          <div class="chip-row">
+            <span class="chip">${escapeHtml(app.sourceType)}</span>
+            <span class="chip">${escapeHtml(app.storage.mode)}</span>
+            ${app.featured ? '<span class="chip tag">featured</span>' : ""}
+            ${(app.categories || []).map((category) => `<span class="chip">${escapeHtml(category)}</span>`).join("")}
+            ${(app.tags || []).map((tag) => `<span class="chip tag">${escapeHtml(tag)}</span>`).join("")}
+          </div>
+          <div class="muted">CPU: ${app.resources.cpuCores} | RAM: ${app.resources.memoryMb}MB | Resume: ${app.session.resume ? "yes" : "no"}</div>
+          <div class="row">
+            <button data-launch="${escapeHtml(app.id)}">${app.session.resume ? "Open / Resume" : "Launch"}</button>
+          </div>
+        `;
+        catalogApps.appendChild(card);
+      }
+
+      catalogApps.querySelectorAll("[data-launch]").forEach((button) => {
+        button.addEventListener("click", () => createSession({ appId: button.dataset.launch, clientId: state.clientId, resumeIfExists: true }));
+      });
+
+      catalogApps.querySelectorAll("[data-favorite]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const appId = button.dataset.favorite;
+          if (state.favorites.has(appId)) {
+            state.favorites.delete(appId);
+          } else {
+            state.favorites.add(appId);
+          }
+          saveFavorites();
+          renderApps();
+        });
+      });
+    }
+
+    function getSortedSessions() {
+      const sessions = [...state.sessions];
+      if (state.mineOnly) {
+        sessions.sort((left, right) => Number(right.mine) - Number(left.mine));
+      }
+      return sessions;
+    }
+
+    function renderSessions() {
+      const sessions = getSortedSessions();
+      if (sessions.length === 0) {
+        sessionsTable.innerHTML = '<tr><td colspan="6" class="muted">No sessions available.</td></tr>';
+        return;
+      }
+
+      sessionsTable.innerHTML = "";
+      for (const session of sessions) {
+        const row = document.createElement("tr");
+        row.innerHTML = `
+          <td>
+            <strong>${escapeHtml(session.appName)}</strong>
+            <div class="muted">${escapeHtml(session.id)}</div>
+            ${session.mine ? '<div class="chip-row"><span class="chip tag">mine</span></div>' : ""}
+          </td>
+          <td><span class="badge ${escapeHtml(session.status)}">${escapeHtml(session.status)}</span></td>
+          <td>${escapeHtml(String(session.launchDurationMs || 0))} ms<br><span class="muted">reused ${escapeHtml(String(session.reusedCount || 0))}x</span></td>
+          <td>${escapeHtml(session.storage?.mode || "ephemeral")}</td>
+          <td>${escapeHtml(session.lastError || "")}</td>
+          <td class="row"></td>
+        `;
+
+        const actions = row.querySelector("td:last-child");
+        const openLink = document.createElement("a");
+        openLink.href = session.url;
+        openLink.target = "_blank";
+        openLink.rel = "noreferrer";
+        openLink.textContent = "Open";
+        actions.appendChild(openLink);
+
+        const diagButton = document.createElement("button");
+        diagButton.className = "secondary";
+        diagButton.textContent = "Diagnostics";
+        diagButton.addEventListener("click", () => loadDiagnostics(session.id));
+        actions.appendChild(diagButton);
+
+        const deleteButton = document.createElement("button");
+        deleteButton.className = "danger";
+        deleteButton.textContent = "Delete";
+        deleteButton.addEventListener("click", async () => {
+          try {
+            await api(`/api/sessions/${session.id}`, { method: "DELETE" });
+            await refreshData();
+          } catch (error) {
+            diagnosticsSummary.textContent = error.message;
+          }
+        });
+        actions.appendChild(deleteButton);
+
+        sessionsTable.appendChild(row);
+      }
+    }
+
+    async function createSession(payload) {
+      if (state.meta?.adminRequired && !state.adminToken) {
+        diagnosticsSummary.textContent = "An admin token is required to create sessions.";
+        return;
+      }
+
+      try {
+        const session = await api("/api/sessions", {
+          method: "POST",
+          body: JSON.stringify(payload),
+        });
+        window.open(session.url, "_blank", "noopener");
+        await refreshData();
+      } catch (error) {
+        diagnosticsSummary.textContent = error.message;
+      }
+    }
+
+    async function loadDiagnostics(sessionId) {
+      state.selectedSessionId = sessionId;
+      diagnosticsSummary.textContent = "Loading diagnostics...";
+      diagnosticsEvents.textContent = "";
+      diagnosticsLogs.textContent = "";
+
+      try {
+        const diagnostics = await api(`/api/sessions/${sessionId}/diagnostics?tail=250`);
+        state.diagnostics = diagnostics;
+        renderDiagnostics();
+      } catch (error) {
+        diagnosticsSummary.textContent = error.message;
+      }
+    }
+
+    function renderDiagnostics() {
+      if (!state.diagnostics) {
+        return;
+      }
+
+      const { session, runtime } = state.diagnostics;
+      const stats = runtime.stats || {};
+      diagnosticsSummary.innerHTML = `
+        <strong>${escapeHtml(session.appName)}</strong> (${escapeHtml(session.id)})<br>
+        Status: ${escapeHtml(session.status)} | Storage: ${escapeHtml(session.storage.mode)} | Launch: ${escapeHtml(String(session.launchDurationMs || 0))} ms<br>
+        CPU: ${escapeHtml(String(stats.cpuPercent || 0))}% | Memory: ${escapeHtml(formatBytes(stats.memoryBytes || 0))} / ${escapeHtml(formatBytes(stats.memoryLimitBytes || 0))}
+      `;
+
+      diagnosticsEvents.textContent = (runtime.events || []).map((event) =>
+        `${event.ts} ${event.level} ${event.event} ${event.message || ""}`.trim()
+      ).join("\n") || "No session events yet.";
+
+      diagnosticsLogs.textContent = runtime.logs || "No container logs available.";
+    }
+
+    async function refreshData() {
+      try {
+        state.meta = await api("/api/meta");
+        state.apps = (await api("/api/apps")).apps || [];
+        renderMeta();
+        renderApps();
+
+        if (!state.meta.adminRequired || state.adminToken) {
+          state.overview = await api("/api/overview");
+          state.sessions = (await api(`/api/sessions${state.mineOnly ? "?mine=1" : ""}`)).sessions || [];
+        } else {
+          state.overview = null;
+          state.sessions = [];
+        }
+
+        renderOverview();
+        renderSessions();
+
+        if (state.selectedSessionId) {
+          const matching = state.sessions.find((session) => session.id === state.selectedSessionId);
+          if (matching) {
+            await loadDiagnostics(state.selectedSessionId);
+          }
+        }
+      } catch (error) {
+        diagnosticsSummary.textContent = error.message;
+      }
+    }
+
+    function buildCustomAppPayload() {
+      const sourceType = document.getElementById("customSourceType").value;
+      const source = { type: sourceType };
+
+      if (sourceType === "command") {
+        source.command = document.getElementById("customCommand").value.trim();
+      } else if (sourceType === "binary-path" || sourceType === "appimage-file") {
+        source.path = document.getElementById("customPath").value.trim();
+      } else {
+        source.url = document.getElementById("customUrl").value.trim();
+      }
+
+      if (sourceType === "archive-url") {
+        source.archiveEntrypoint = document.getElementById("customArchiveEntrypoint").value.trim();
+      }
+
+      if (sourceType === "appimage-url" || sourceType === "archive-url") {
+        source.sha256 = document.getElementById("customSha").value.trim();
+      }
+
+      return {
+        clientId: state.clientId,
+        resumeIfExists: true,
+        app: {
+          name: document.getElementById("customName").value.trim() || "Custom app",
+          description: "Custom launch from dashboard",
+          featured: false,
+          categories: ["custom"],
+          tags: [sourceType],
+          source,
+          launch: {
+            args: document.getElementById("customArgs").value.trim(),
+            preLaunchCommand: document.getElementById("customPreLaunch").value.trim(),
+            workingDirectory: document.getElementById("customWorkdir").value.trim(),
+            extractAndRun: sourceType.startsWith("appimage"),
+          },
+          storage: {
+            mode: document.getElementById("customStorageMode").value,
+          },
+          session: {
+            resume: true,
+          },
+        },
+      };
+    }
+
+    function updateCustomFields() {
+      const sourceType = document.getElementById("customSourceType").value;
+      document.getElementById("customUrlField").hidden = !["appimage-url", "archive-url"].includes(sourceType);
+      document.getElementById("customPathField").hidden = !["binary-path", "appimage-file"].includes(sourceType);
+      document.getElementById("customCommandField").hidden = sourceType !== "command";
+      document.getElementById("customArchiveEntrypointField").hidden = sourceType !== "archive-url";
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function formatBytes(value) {
+      if (!value) {
+        return "0 B";
+      }
+      const units = ["B", "KB", "MB", "GB", "TB"];
+      let current = value;
+      let index = 0;
+      while (current >= 1024 && index < units.length - 1) {
+        current /= 1024;
+        index += 1;
+      }
+      return `${current.toFixed(index === 0 ? 0 : 1)} ${units[index]}`;
+    }
+
+    document.getElementById("saveAccess").addEventListener("click", () => {
+      state.adminToken = adminTokenInput.value.trim();
+      state.clientId = clientIdInput.value.trim() || state.clientId;
+      localStorage.setItem("appWebAdminToken", state.adminToken);
+      localStorage.setItem("appWebClientId", state.clientId);
+      clientIdInput.value = state.clientId;
+      refreshData();
+    });
+
+    document.getElementById("refreshAll").addEventListener("click", refreshData);
+    document.getElementById("searchApps").addEventListener("input", (event) => {
+      state.search = event.target.value;
+      renderApps();
+    });
+    document.getElementById("favoritesOnly").addEventListener("change", (event) => {
+      state.favoritesOnly = event.target.checked;
+      renderApps();
+    });
+    document.getElementById("mineOnly").addEventListener("change", (event) => {
+      state.mineOnly = event.target.checked;
+      refreshData();
+    });
+    document.getElementById("customSourceType").addEventListener("change", updateCustomFields);
+    document.getElementById("launchCustom").addEventListener("click", () => {
+      createSession(buildCustomAppPayload());
+    });
+
+    updateCustomFields();
+    refreshData();
+    setInterval(refreshData, 15000);
+  </script>
+</body>
+</html>
