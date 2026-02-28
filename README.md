@@ -1,6 +1,6 @@
-# app-web
+# Appstream Gateway
 
-`app-web` turns compatible Linux desktop applications into isolated browser sessions.
+`appstream-gateway` turns compatible Linux desktop applications into isolated browser sessions.
 It supports AppImages, preinstalled X11 commands, packaged archives, and other compatible Linux desktop apps.
 
 The stack is:
