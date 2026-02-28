@@ -1,11 +1,10 @@
-version: "3.9"
-
 services:
   session-template:
     build:
       context: .
     image: ${SESSION_IMAGE:-local/app-web-session:latest}
-    command: ["/bin/sh", "-lc", "echo session image ready"]
+    entrypoint: ["/bin/sh", "-lc"]
+    command: ["echo session image ready"]
     restart: "no"
     networks:
       - app-web-sessions
@@ -41,6 +40,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./config:/app/config:ro
+    user: "0:0"
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777
