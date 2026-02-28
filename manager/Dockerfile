@@ -8,6 +8,15 @@ WORKDIR /app
 COPY package.json /app/package.json
 COPY src /app/src
 COPY public /app/public
+RUN find /app/src -type f -name "*.js" -exec sed -i 's/\r$//' {} + \
+  && find /app/public -type f -name "*.html" -exec sed -i 's/\r$//' {} + \
+  && node --check /app/src/server.js \
+  && node --check /app/src/docker-api.js \
+  && node --check /app/src/kubernetes-api.js \
+  && node --check /app/src/catalog.js \
+  && node --check /app/src/auth.js \
+  && node --check /app/src/util.js \
+  && node --check /app/src/logger.js
 
 USER node
 
