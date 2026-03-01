@@ -145,13 +145,34 @@ export function buildBaseUrl(request, configuredBaseUrl) {
     return configuredBaseUrl.replace(/\/+$/, "");
   }
 
-  const forwardedProto = request.headers["x-forwarded-proto"];
-  const protocol = Array.isArray(forwardedProto)
-    ? forwardedProto[0]
-    : forwardedProto || "http";
-  const host = request.headers["x-forwarded-host"] || request.headers.host || "localhost";
+  const forwardedProto = firstHeaderValue(request.headers["x-forwarded-proto"]);
+  const forwardedHost = firstHeaderValue(request.headers["x-forwarded-host"]);
+  const forwardedPort = firstHeaderValue(request.headers["x-forwarded-port"]);
+  const directHost = firstHeaderValue(request.headers.host);
+
+  const protocol =
+    forwardedProto ||
+    (request.socket?.encrypted ? "https" : "http");
+
+  let host = forwardedHost || directHost || "";
+  if (!host) {
+    const address = request.socket?.localAddress || "localhost";
+    const port = request.socket?.localPort ? `:${request.socket.localPort}` : "";
+    host = `${address}${port}`;
+  }
+
+  if (forwardedPort && host && !host.includes(":")) {
+    host = `${host}:${forwardedPort}`;
+  }
 
   return `${protocol}://${host}`.replace(/\/+$/, "");
+}
+
+function firstHeaderValue(value) {
+  if (Array.isArray(value)) {
+    return String(value[0] || "").split(",")[0].trim();
+  }
+  return String(value || "").split(",")[0].trim();
 }
 
 export function msToIso(value) {

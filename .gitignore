@@ -1,0 +1,5 @@
+/kubeconfig
+/root
+/.env
+/manager/node_modules
+/node_modules

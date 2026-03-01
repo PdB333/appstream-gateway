@@ -86,13 +86,14 @@ The manager service is then available through the Ingress in [`k8s/ingress.yaml`
 1. Copy `.env.example` to `.env`.
 2. Set `SESSION_SECRET`.
 3. Set `ADMIN_API_TOKEN` if you want the admin APIs protected.
-4. Start the stack:
+4. Leave `PUBLIC_BASE_URL` empty to auto-detect the current host, or set it explicitly behind a proxy/public domain.
+5. Start the stack:
 
 ```bash
 docker compose up --build
 ```
 
-5. Open `http://localhost:3000`.
+6. Open the manager on the host or domain you exposed.
 
 The default catalog contains safe demo apps:
 

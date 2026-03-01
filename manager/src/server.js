@@ -530,7 +530,7 @@ function buildDockerContainerSpec(session, app, labels, env) {
         "/run": "rw,nosuid,nodev,size=67108864",
         "/data": "rw,nosuid,nodev,size=536870912",
       },
-      CapAdd: ["CHOWN", "SETUID", "SETGID"],
+      CapAdd: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"],
       CapDrop: ["ALL"],
       SecurityOpt: ["no-new-privileges:true"],
     },
@@ -625,7 +625,7 @@ function buildKubernetesPodSpec(session, app, labels, env) {
             allowPrivilegeEscalation: false,
             readOnlyRootFilesystem: true,
             capabilities: {
-              add: ["CHOWN", "SETUID", "SETGID"],
+              add: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"],
               drop: ["ALL"],
             },
           },

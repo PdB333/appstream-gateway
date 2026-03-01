@@ -17,7 +17,7 @@ services:
       - session-template
     environment:
       PORT: 3000
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       APP_CATALOG_PATH: /app/config/apps.json
       SESSION_BACKEND: ${SESSION_BACKEND:-docker}
       SESSION_IMAGE: ${SESSION_IMAGE:-local/app-web-session:latest}

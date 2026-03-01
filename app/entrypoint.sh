@@ -86,10 +86,21 @@ ensure_user() {
 }
 
 prepare_directories() {
-  mkdir -p "${APP_CACHE_DIR}" "${APP_DOWNLOAD_DIR}" "${SESSION_HOME}" "${XDG_RUNTIME_DIR}" "${LOG_DIR}" /tmp
+  mkdir -p \
+    "${APP_CACHE_DIR}" \
+    "${APP_DOWNLOAD_DIR}" \
+    "${SESSION_HOME}" \
+    "${SESSION_HOME}/.config" \
+    "${SESSION_HOME}/.cache" \
+    "${SESSION_HOME}/.local/share" \
+    "${XDG_RUNTIME_DIR}" \
+    "${LOG_DIR}" \
+    /tmp \
+    /tmp/.X11-unix
   touch "${LOG_DIR}/xvfb.log" "${LOG_DIR}/openbox.log" "${LOG_DIR}/x11vnc.log" "${LOG_DIR}/websockify.log" "${LOG_DIR}/app.log"
-  chown -R "${APP_USER}:${APP_USER}" "${APP_CACHE_DIR}" "${DATA_DIR}" "${XDG_RUNTIME_DIR}" "${SESSION_HOME}"
+  chmod 1777 /tmp /tmp/.X11-unix
   chmod 0700 "${XDG_RUNTIME_DIR}"
+  chown -R "${APP_USER}:${APP_USER}" "${APP_CACHE_DIR}" "${DATA_DIR}" "${XDG_RUNTIME_DIR}" "${SESSION_HOME}"
 }
 
 tail_component_log() {
@@ -292,14 +303,17 @@ export XDG_DATA_HOME="${SESSION_HOME}/.local/share"
 export DESKTOP_SESSION="openbox"
 export NO_AT_BRIDGE=1
 mkdir -p "\${XDG_CONFIG_HOME}" "\${XDG_CACHE_HOME}" "\${XDG_DATA_HOME}" "\${HOME}"
-if [[ -n "${RESOLVED_WORKDIR}" ]]; then
-  cd "${RESOLVED_WORKDIR}"
-fi
-if [[ -n "${APP_PRE_LAUNCH_COMMAND}" ]]; then
-  /bin/bash -lc "$(printf '%q' "${APP_PRE_LAUNCH_COMMAND}")"
-fi
-exec /bin/bash -lc "$(printf '%q' "${RESOLVED_COMMAND}")"
 EOF
+
+  if [[ -n "${RESOLVED_WORKDIR}" ]]; then
+    printf 'cd -- %q\n' "${RESOLVED_WORKDIR}" >> /tmp/start-app.sh
+  fi
+  if [[ -n "${APP_PRE_LAUNCH_COMMAND}" ]]; then
+    printf 'APP_PRE_LAUNCH_COMMAND=%q\n' "${APP_PRE_LAUNCH_COMMAND}" >> /tmp/start-app.sh
+    printf '/bin/bash -lc "$APP_PRE_LAUNCH_COMMAND"\n' >> /tmp/start-app.sh
+  fi
+  printf 'APP_LAUNCH_COMMAND=%q\n' "${RESOLVED_COMMAND}" >> /tmp/start-app.sh
+  printf 'exec /bin/bash -lc "$APP_LAUNCH_COMMAND"\n' >> /tmp/start-app.sh
 
   chmod 0755 /tmp/start-app.sh
 }
@@ -312,7 +326,14 @@ start_xvfb() {
 
 start_window_manager() {
   emit_log "info" "openbox_start" "Starting openbox"
-  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" openbox >>"${LOG_DIR}/openbox.log" 2>&1 &
+  runuser -u "${APP_USER}" -- env \
+    DISPLAY="${DISPLAY}" \
+    HOME="${SESSION_HOME}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    XDG_CONFIG_HOME="${SESSION_HOME}/.config" \
+    XDG_CACHE_HOME="${SESSION_HOME}/.cache" \
+    XDG_DATA_HOME="${SESSION_HOME}/.local/share" \
+    openbox >>"${LOG_DIR}/openbox.log" 2>&1 &
   pids+=("$!")
 }
 
