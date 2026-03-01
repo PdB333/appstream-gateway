@@ -66,6 +66,50 @@ export class DockerClient {
     return this.request("GET", `/containers/${containerId}/stats?stream=0`);
   }
 
+  async createExec(containerId, body) {
+    return this.request("POST", `/containers/${containerId}/exec`, body);
+  }
+
+  async startExec(execId, body = { Detach: false, Tty: false }) {
+    return this.requestBuffer("POST", `/exec/${execId}/start`, body);
+  }
+
+  async inspectExec(execId) {
+    return this.request("GET", `/exec/${execId}/json`);
+  }
+
+  async execInContainer(containerId, command, options = {}) {
+    const exec = await this.createExec(containerId, {
+      AttachStdout: options.stdout !== false,
+      AttachStderr: options.stderr !== false,
+      Tty: false,
+      Cmd: command,
+      Env: options.env,
+      WorkingDir: options.workdir,
+      User: options.user,
+    });
+
+    const buffer = await this.startExec(exec.Id, {
+      Detach: false,
+      Tty: false,
+    });
+    const inspect = await this.inspectExec(exec.Id);
+    const output = demuxDockerLogStream(buffer);
+
+    if ((inspect.ExitCode || 0) !== 0) {
+      throw new DockerError(
+        output || `Container exec exited with code ${inspect.ExitCode}`,
+        500,
+        {
+          exitCode: inspect.ExitCode,
+          output,
+        }
+      );
+    }
+
+    return output;
+  }
+
   request(method, requestPath, body) {
     return new Promise((resolve, reject) => {
       const payload = body ? JSON.stringify(body) : null;
@@ -113,13 +157,20 @@ export class DockerClient {
     });
   }
 
-  requestBuffer(method, requestPath) {
+  requestBuffer(method, requestPath, body) {
     return new Promise((resolve, reject) => {
+      const payload = body ? JSON.stringify(body) : null;
       const request = http.request(
         {
           socketPath: this.socketPath,
           path: requestPath,
           method,
+          headers: payload
+            ? {
+                "content-type": "application/json",
+                "content-length": Buffer.byteLength(payload),
+              }
+            : undefined,
         },
         (response) => {
           const chunks = [];
@@ -146,6 +197,9 @@ export class DockerClient {
       );
 
       request.on("error", reject);
+      if (payload) {
+        request.write(payload);
+      }
       request.end();
     });
   }

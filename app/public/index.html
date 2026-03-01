@@ -19,6 +19,7 @@
         body {
             position: fixed;
             inset: 0;
+            font-family: "Segoe UI", sans-serif;
         }
 
         #display {
@@ -41,29 +42,76 @@
             background: #050505;
         }
 
-        #status {
+        #hud {
             position: fixed;
-            left: 50%;
-            bottom: 16px;
-            transform: translateX(-50%);
+            top: 12px;
+            right: 12px;
             z-index: 20;
+            display: grid;
+            gap: 8px;
+            justify-items: end;
+        }
+
+        .hud-panel {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
             padding: 8px 12px;
             border-radius: 999px;
             background: rgba(10, 12, 16, 0.74);
             color: #f5f7fa;
-            font: 500 12px/1.2 "Segoe UI", sans-serif;
             backdrop-filter: blur(10px);
+            box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+        }
+
+        #status {
+            white-space: nowrap;
             transition: opacity 180ms ease;
         }
 
         #status.is-hidden {
             opacity: 0;
         }
+
+        .toggle {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            white-space: nowrap;
+            font-size: 12px;
+            color: #d9dde3;
+        }
+
+        .toggle input {
+            margin: 0;
+        }
+
+        #closeAppButton {
+            border: none;
+            border-radius: 999px;
+            padding: 8px 12px;
+            background: rgba(255, 99, 71, 0.92);
+            color: white;
+            cursor: pointer;
+        }
+
+        #closeAppButton:hover {
+            background: rgba(255, 112, 84, 0.98);
+        }
     </style>
 </head>
 <body>
     <div id="display"></div>
-    <div id="status">Loading</div>
+    <div id="hud">
+        <div class="hud-panel">
+            <div id="status">Loading</div>
+        </div>
+        <div class="hud-panel">
+            <label class="toggle"><input id="closeOnUnload" type="checkbox">Close app with tab</label>
+            <label class="toggle"><input id="confirmOnClose" type="checkbox">Warn on close</label>
+            <button id="closeAppButton" type="button">Close app</button>
+        </div>
+    </div>
 
     <script type="module" crossorigin="anonymous">
         import RFB from './core/rfb.js';
@@ -71,9 +119,34 @@
         let rfb;
         let desktopName = "";
         let reconnectTimer = 0;
+        let resizeTimer = 0;
+        let resizeInFlight = false;
+        let pendingResize = null;
+        let lastResizeSent = "";
+        let suppressCloseOnUnload = false;
+        let sessionClosing = false;
 
         const display = document.getElementById("display");
         const statusElement = document.getElementById("status");
+        const closeOnUnloadInput = document.getElementById("closeOnUnload");
+        const confirmOnCloseInput = document.getElementById("confirmOnClose");
+        const closeAppButton = document.getElementById("closeAppButton");
+        const sessionMatch = window.location.pathname.match(/^\/sessions\/([a-z0-9]+)/);
+        const sessionId = sessionMatch ? sessionMatch[1] : "";
+        const sessionToken = new URL(window.location.href).searchParams.get("token") || "";
+        const closeOnUnloadKey = "appWeb.closeOnUnload";
+        const confirmOnCloseKey = "appWeb.confirmOnClose";
+
+        closeOnUnloadInput.checked = localStorage.getItem(closeOnUnloadKey) !== "0";
+        confirmOnCloseInput.checked = localStorage.getItem(confirmOnCloseKey) !== "0";
+
+        closeOnUnloadInput.addEventListener("change", () => {
+            localStorage.setItem(closeOnUnloadKey, closeOnUnloadInput.checked ? "1" : "0");
+        });
+
+        confirmOnCloseInput.addEventListener("change", () => {
+            localStorage.setItem(confirmOnCloseKey, confirmOnCloseInput.checked ? "1" : "0");
+        });
 
         function setStatus(text, autoHide = false) {
             statusElement.textContent = text;
@@ -85,18 +158,16 @@
             if (autoHide) {
                 reconnectTimer = window.setTimeout(() => {
                     statusElement.classList.add("is-hidden");
-                }, 1600);
+                }, 1400);
             }
         }
 
         function readQueryVariable(name, defaultValue) {
             const re = new RegExp('.*[?&]' + name + '=([^&#]*)');
             const match = document.location.href.match(re);
-
             if (match) {
                 return decodeURIComponent(match[1]);
             }
-
             return defaultValue;
         }
 
@@ -119,6 +190,19 @@
             return pathname.replace(/^\//, "") + "/websockify";
         }
 
+        function sessionControlUrl(action, params = {}) {
+            const url = new URL(`/api/session-control/${sessionId}/${action}`, window.location.origin);
+            if (sessionToken) {
+                url.searchParams.set("token", sessionToken);
+            }
+            for (const [key, value] of Object.entries(params)) {
+                if (value !== undefined && value !== null && value !== "") {
+                    url.searchParams.set(key, String(value));
+                }
+            }
+            return url;
+        }
+
         function focusCanvas() {
             const canvas = document.querySelector("#display canvas");
             if (canvas) {
@@ -128,15 +212,92 @@
         }
 
         function reconnectSoon() {
+            suppressCloseOnUnload = true;
             window.setTimeout(() => {
                 window.location.reload();
             }, readNumberQuery("reconnect_delay", 1000));
+        }
+
+        async function closeSession(reason, keepalive = false) {
+            if (!sessionId || sessionClosing) {
+                return;
+            }
+            sessionClosing = true;
+            try {
+                await fetch(sessionControlUrl("close", { reason }), {
+                    method: "POST",
+                    keepalive,
+                    credentials: "same-origin",
+                });
+            } catch {
+                // best effort on unload
+            }
+        }
+
+        async function sendResize(width, height) {
+            if (!sessionId) {
+                return;
+            }
+            const key = `${width}x${height}`;
+            if (key === lastResizeSent) {
+                return;
+            }
+            await fetch(sessionControlUrl("resize", { width, height }), {
+                method: "POST",
+                credentials: "same-origin",
+            });
+            lastResizeSent = key;
+        }
+
+        function flushPendingResize() {
+            if (!pendingResize) {
+                return;
+            }
+            const next = pendingResize;
+            pendingResize = null;
+            queueSessionResize(next.width, next.height, true);
+        }
+
+        function queueSessionResize(width = Math.round(window.innerWidth), height = Math.round(window.innerHeight), immediate = false) {
+            const nextWidth = Math.max(640, width);
+            const nextHeight = Math.max(360, height);
+
+            if (resizeTimer) {
+                clearTimeout(resizeTimer);
+                resizeTimer = 0;
+            }
+
+            const runner = async () => {
+                if (resizeInFlight) {
+                    pendingResize = { width: nextWidth, height: nextHeight };
+                    return;
+                }
+                resizeInFlight = true;
+                try {
+                    await sendResize(nextWidth, nextHeight);
+                } catch {
+                    // ignore transient resize failures while the session is starting
+                } finally {
+                    resizeInFlight = false;
+                    flushPendingResize();
+                }
+            };
+
+            if (immediate) {
+                runner();
+                return;
+            }
+
+            resizeTimer = window.setTimeout(runner, 140);
         }
 
         function connectedToServer() {
             const label = desktopName ? `Connected to ${desktopName}` : "Connected";
             setStatus(label, true);
             focusCanvas();
+            queueSessionResize(undefined, undefined, true);
+            window.setTimeout(() => queueSessionResize(), 300);
+            window.setTimeout(() => queueSessionResize(), 1000);
         }
 
         function disconnectedFromServer() {
@@ -153,6 +314,39 @@
             desktopName = e.detail.name || "";
             document.title = desktopName || readQueryVariable("title", "app-web");
         }
+
+        closeAppButton.addEventListener("click", async () => {
+            suppressCloseOnUnload = true;
+            setStatus("Closing app...");
+            await closeSession("manual_close");
+            window.location.replace("/");
+        });
+
+        window.addEventListener("resize", () => {
+            focusCanvas();
+            queueSessionResize();
+        }, { passive: true });
+
+        window.addEventListener("orientationchange", () => {
+            queueSessionResize();
+        });
+
+        window.addEventListener("beforeunload", (event) => {
+            if (suppressCloseOnUnload) {
+                return;
+            }
+            if (confirmOnCloseInput.checked) {
+                event.preventDefault();
+                event.returnValue = "";
+            }
+        });
+
+        window.addEventListener("pagehide", () => {
+            if (suppressCloseOnUnload || !closeOnUnloadInput.checked) {
+                return;
+            }
+            closeSession("tab_close", true);
+        });
 
         window.addEventListener("error", () => {
             reconnectSoon();
@@ -181,7 +375,7 @@
         rfb.viewOnly = readBooleanQuery("view_only", false);
         rfb.scaleViewport = readBooleanQuery("scale", true);
         rfb.clipViewport = readBooleanQuery("clip", false);
-        rfb.resizeSession = readBooleanQuery("resize", true);
+        rfb.resizeSession = false;
         rfb.qualityLevel = readNumberQuery("quality", 9);
         rfb.compressionLevel = readNumberQuery("compression", 1);
         rfb.showDotCursor = true;
@@ -189,7 +383,7 @@
         rfb.focusOnClick = true;
         document.title = readQueryVariable("title", "app-web");
 
-        window.addEventListener("resize", focusCanvas);
+        focusCanvas();
         window.setInterval(focusCanvas, 250);
     </script>
 </body>

@@ -197,6 +197,10 @@ async function handleRequest(request, response) {
     return serveStatic(response, "index.html", "text/html; charset=utf-8");
   }
 
+  if (url.pathname.startsWith("/api/session-control/")) {
+    return handleSessionControlApi(request, response, url);
+  }
+
   if (url.pathname.startsWith("/api/sessions")) {
     return handleSessionApi(request, response, url);
   }
@@ -302,6 +306,55 @@ function resolveRequestedApp(body) {
     },
     defaults
   );
+}
+
+async function handleSessionControlApi(request, response, url) {
+  const controlMatch = url.pathname.match(/^\/api\/session-control\/([a-z0-9]+)\/(resize|close)$/);
+  if (!controlMatch) {
+    return text(response, 404, "Not found");
+  }
+
+  if (request.method !== "POST") {
+    return text(response, 405, "Method not allowed");
+  }
+
+  const session = sessions.get(controlMatch[1]);
+  if (!session) {
+    return json(response, 404, { error: "Session not found" });
+  }
+
+  authorizeSessionRequest(
+    request,
+    {
+      setHeader() {},
+      getHeader() {
+        return undefined;
+      },
+    },
+    session,
+    url
+  );
+  session.lastActivityAt = Date.now();
+
+  if (controlMatch[2] === "close") {
+    await destroySession(session.id, normalizeSessionCloseReason(url.searchParams.get("reason")));
+    return json(response, 200, { ok: true });
+  }
+
+  const width = clampSessionDimension(parseInteger(url.searchParams.get("width"), 0), 640, 7680);
+  const height = clampSessionDimension(parseInteger(url.searchParams.get("height"), 0), 360, 4320);
+  const depth = clampSessionDimension(
+    parseInteger(url.searchParams.get("depth"), session.app.display?.depth || config.defaultScreenDepth),
+    16,
+    32
+  );
+
+  if (!width || !height) {
+    return json(response, 400, { error: "width and height are required" });
+  }
+
+  await resizeSessionRuntime(session, { width, height, depth });
+  return json(response, 200, { ok: true, width, height, depth });
 }
 
 async function handleSessionApi(request, response, url) {
@@ -558,6 +611,67 @@ async function createSession(app, { clientId }) {
   }
 
   return session;
+}
+
+function clampSessionDimension(value, min, max) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return Math.max(min, Math.min(max, value));
+}
+
+function normalizeSessionCloseReason(reason) {
+  const normalized = String(reason || "session_page")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .slice(0, 32);
+  return normalized || "session_page";
+}
+
+async function resizeSessionRuntime(session, { width, height, depth }) {
+  if (config.sessionBackend !== "docker") {
+    const error = new Error("Live resize is only supported with the Docker backend");
+    error.statusCode = 501;
+    throw error;
+  }
+
+  await refreshSessionState(session);
+  if (!["ready", "starting"].includes(session.status)) {
+    const error = new Error("Session is no longer running");
+    error.statusCode = 410;
+    throw error;
+  }
+
+  if (
+    session.app.display?.width === width &&
+    session.app.display?.height === height &&
+    session.app.display?.depth === depth
+  ) {
+    return;
+  }
+
+  const resizeCommand = [
+    "runuser",
+    "-u",
+    "appuser",
+    "--",
+    "env",
+    "DISPLAY=:0",
+    "XDG_RUNTIME_DIR=/tmp/runtime-appuser",
+    "HOME=/data/home",
+    "XDG_CONFIG_HOME=/data/home/.config",
+    "XDG_CACHE_HOME=/data/home/.cache",
+    "XDG_DATA_HOME=/data/home/.local/share",
+    "sh",
+    "-lc",
+    `xrandr --fb ${width}x${height} >/dev/null 2>&1 || xrandr -s ${width}x${height} >/dev/null 2>&1`,
+  ];
+
+  await runtimeClient.execInContainer(session.containerId, resizeCommand);
+  session.app.display.width = width;
+  session.app.display.height = height;
+  session.app.display.depth = depth;
 }
 
 function resolveStorage(app, clientId) {
