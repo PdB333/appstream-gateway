@@ -189,6 +189,10 @@ async function handleRequest(request, response) {
     });
   }
 
+  if (request.method === "GET" && url.pathname.startsWith("/app/")) {
+    return handleDirectAppLaunch(request, response, url);
+  }
+
   if (request.method === "GET" && (url.pathname === "/" || url.pathname === "/index.html")) {
     return serveStatic(response, "index.html", "text/html; charset=utf-8");
   }
@@ -204,13 +208,15 @@ async function handleRequest(request, response) {
   return text(response, 404, "Not found");
 }
 
-function requireAdmin(request) {
+function requireAdmin(request, url = null) {
   if (!config.adminApiToken) {
     return;
   }
 
   const authorization = request.headers.authorization || "";
-  const token = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const bearerToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
+  const queryToken = url?.searchParams.get("adminToken") || "";
+  const token = bearerToken || queryToken;
   if (token !== config.adminApiToken) {
     const error = new Error("Unauthorized");
     error.statusCode = 401;
@@ -218,13 +224,58 @@ function requireAdmin(request) {
   }
 }
 
-function getClientId(request, body = null) {
+function getClientId(request, body = null, url = null) {
+  const cookies = parseCookies(request.headers.cookie || "");
   return String(
     body?.clientId ||
+      url?.searchParams.get("clientId") ||
       request.headers["x-appweb-client-id"] ||
       request.headers["x-client-id"] ||
+      cookies.appweb_client_id ||
       ""
   ).trim();
+}
+
+function getOrCreateClientId(request, response, url = null) {
+  const existingClientId = getClientId(request, null, url);
+  if (existingClientId) {
+    return existingClientId;
+  }
+
+  const generatedClientId = "client-" + createSessionId();
+  appendSetCookie(
+    response,
+    serializeCookie("appweb_client_id", generatedClientId, {
+      path: "/",
+      maxAge: Math.floor(config.sessionTokenTtlMs / 1000),
+      secure: config.secureCookies,
+      sameSite: "Lax",
+      httpOnly: false,
+    })
+  );
+
+  return generatedClientId;
+}
+
+function appendSetCookie(response, cookieValue) {
+  if (typeof response.setHeader !== "function") {
+    return;
+  }
+
+  const existingCookies =
+    typeof response.getHeader === "function" ? response.getHeader("set-cookie") : undefined;
+
+  if (!existingCookies) {
+    response.setHeader("set-cookie", cookieValue);
+    return;
+  }
+
+  if (Array.isArray(existingCookies)) {
+    response.setHeader("set-cookie", [...existingCookies, cookieValue]);
+    return;
+  }
+
+  response.setHeader("set-cookie", [existingCookies, cookieValue]);
 }
 
 function resolveRequestedApp(body) {
@@ -316,13 +367,7 @@ async function handleSessionApi(request, response, url) {
         : null;
 
     if (existingSession) {
-      existingSession.lastActivityAt = Date.now();
-      existingSession.reusedCount += 1;
-      metrics.sessionsReusedTotal += 1;
-      recordSessionEvent(existingSession, "info", "session_reused", "Existing session reused", {
-        reusedCount: existingSession.reusedCount,
-      });
-
+      markSessionReused(existingSession);
       return json(response, 200, serializeSession(existingSession, request, { reused: true }));
     }
 
@@ -331,6 +376,42 @@ async function handleSessionApi(request, response, url) {
   }
 
   return text(response, 404, "Not found");
+}
+
+async function handleDirectAppLaunch(request, response, url) {
+  const appMatch = url.pathname.match(/^\/app\/([a-z0-9][a-z0-9-_]*)\/?$/i);
+  if (!appMatch) {
+    return text(response, 404, "App not found");
+  }
+
+  requireAdmin(request, url);
+
+  const appId = appMatch[1];
+  const app = appCatalog.get(appId);
+  if (!app) {
+    return text(response, 404, "App not found");
+  }
+
+  const clientId = getOrCreateClientId(request, response, url);
+  const resumeIfExists = url.searchParams.get("resume") !== "0";
+  const existingSession =
+    resumeIfExists && app.session.resume && clientId
+      ? findReusableSession(app.id, clientId)
+      : null;
+
+  const session =
+    existingSession ? markSessionReused(existingSession) : await createSession(app, { clientId });
+  const serializedSession = serializeSession(
+    session,
+    request,
+    existingSession ? { reused: true } : {}
+  );
+
+  response.writeHead(302, {
+    location: serializedSession.url,
+    "cache-control": "no-store",
+  });
+  response.end();
 }
 
 function findReusableSession(appId, clientId) {
@@ -344,6 +425,16 @@ function findReusableSession(appId, clientId) {
   }
 
   return null;
+}
+
+function markSessionReused(session) {
+  session.lastActivityAt = Date.now();
+  session.reusedCount += 1;
+  metrics.sessionsReusedTotal += 1;
+  recordSessionEvent(session, "info", "session_reused", "Existing session reused", {
+    reusedCount: session.reusedCount,
+  });
+  return session;
 }
 
 async function createSession(app, { clientId }) {
@@ -1248,8 +1339,8 @@ function authorizeSessionRequest(request, response, session, url) {
   }
 
   if (typeof response.setHeader === "function") {
-    response.setHeader(
-      "set-cookie",
+    appendSetCookie(
+      response,
       serializeCookie(cookieName, token, {
         path: `/sessions/${session.id}`,
         maxAge: Math.floor(config.sessionTokenTtlMs / 1000),

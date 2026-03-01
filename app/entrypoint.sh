@@ -58,7 +58,7 @@ emit_log() {
     "$(json_escape "${event}")" \
     "$(json_escape "${APP_SESSION_ID}")" \
     "$(json_escape "${APP_NAME}")" \
-    "$(json_escape "${message}")"
+    "$(json_escape "${message}")" >&2
 }
 
 cleanup() {
