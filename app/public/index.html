@@ -27,13 +27,16 @@
             width: 100vw;
             height: 100vh;
             overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             background: #050505;
         }
 
         #display canvas {
             display: block;
-            width: 100% !important;
-            height: 100% !important;
+            max-width: 100%;
+            max-height: 100%;
             outline: none;
             background: #050505;
         }
@@ -178,7 +181,7 @@
         rfb.viewOnly = readBooleanQuery("view_only", false);
         rfb.scaleViewport = readBooleanQuery("scale", true);
         rfb.clipViewport = readBooleanQuery("clip", false);
-        rfb.resizeSession = readBooleanQuery("resize", false);
+        rfb.resizeSession = readBooleanQuery("resize", true);
         rfb.qualityLevel = readNumberQuery("quality", 9);
         rfb.compressionLevel = readNumberQuery("compression", 1);
         rfb.showDotCursor = true;
