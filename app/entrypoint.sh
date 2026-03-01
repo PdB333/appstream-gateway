@@ -179,8 +179,13 @@ download_artifact() {
 
 prepare_appimage() {
   local appimage_path=$1
-  chmod +x "${appimage_path}"
-  printf '%s' "${appimage_path}"
+  local staged_path
+
+  staged_path="${APP_DOWNLOAD_DIR}/$(basename "${appimage_path}")"
+  cp -f "${appimage_path}" "${staged_path}"
+  chmod 0755 "${staged_path}"
+  chown "${APP_USER}:${APP_USER}" "${staged_path}" 2>/dev/null || true
+  printf '%s' "${staged_path}"
 }
 
 prepare_archive() {
