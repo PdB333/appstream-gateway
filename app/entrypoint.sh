@@ -32,6 +32,8 @@ LOG_DIR="${LOG_DIR:-/tmp/app-web-logs}"
 APP_WINDOW_MODE="${APP_WINDOW_MODE:-immersive}"
 X11VNC_NCACHE="${X11VNC_NCACHE:-0}"
 X11VNC_NOXDAMAGE="${X11VNC_NOXDAMAGE:-1}"
+XVFB_MAX_WIDTH="${XVFB_MAX_WIDTH:-3840}"
+XVFB_MAX_HEIGHT="${XVFB_MAX_HEIGHT:-2160}"
 
 declare -a pids=()
 app_pid=""
@@ -145,6 +147,13 @@ wait_for_display() {
     fi
     sleep 0.5
   done
+}
+
+apply_display_geometry() {
+  local width=${1:-${SCREEN_WIDTH}}
+  local height=${2:-${SCREEN_HEIGHT}}
+
+  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" sh -lc "xrandr --fb ${width}x${height} >/dev/null 2>&1 || xrandr -s ${width}x${height} >/dev/null 2>&1 || true"
 }
 
 wait_for_port() {
@@ -339,7 +348,7 @@ EOF
 
 start_xvfb() {
   emit_log "info" "xvfb_start" "Starting Xvfb"
-  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" Xvfb "${DISPLAY}" -screen 0 "${SCREEN_WIDTH}x${SCREEN_HEIGHT}x${SCREEN_DEPTH}" -ac -nolisten tcp >>"${LOG_DIR}/xvfb.log" 2>&1 &
+  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" Xvfb "${DISPLAY}" -screen 0 "${XVFB_MAX_WIDTH}x${XVFB_MAX_HEIGHT}x${SCREEN_DEPTH}" -ac -nolisten tcp >>"${LOG_DIR}/xvfb.log" 2>&1 &
   pids+=("$!")
 }
 
@@ -373,15 +382,21 @@ set -euo pipefail
 export DISPLAY="${DISPLAY}"
 export HOME="${SESSION_HOME}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
-screen_width="${SCREEN_WIDTH}"
-screen_height="${SCREEN_HEIGHT}"
+fallback_width="${SCREEN_WIDTH}"
+fallback_height="${SCREEN_HEIGHT}"
 
 while true; do
+  screen_size="$(xdpyinfo 2>/dev/null | awk '/dimensions:/ { print $2; exit }')"
+  screen_width="${screen_size%x*}"
+  screen_height="${screen_size#*x}"
+  [[ -z "${screen_width}" || "${screen_width}" == "${screen_size}" ]] && screen_width="${fallback_width}"
+  [[ -z "${screen_height}" || "${screen_height}" == "${screen_size}" ]] && screen_height="${fallback_height}"
   while read -r window_id desktop host window_class rest; do
     [[ -z "\${window_id}" ]] && continue
     case "\${window_class}" in
       *Openbox*|*openbox*|*Desktop*|*desktop_window*) continue ;;
     esac
+    xprop -id "\${window_id}" -f _MOTIF_WM_HINTS 32c -set _MOTIF_WM_HINTS "2, 0, 0, 0, 0" >/dev/null 2>&1 || true
     wmctrl -i -r "\${window_id}" -b add,maximized_vert,maximized_horz,fullscreen >/dev/null 2>&1 || true
     wmctrl -i -r "\${window_id}" -e "0,0,0,\${screen_width},\${screen_height}" >/dev/null 2>&1 || true
     wmctrl -i -a "\${window_id}" >/dev/null 2>&1 || true
@@ -445,6 +460,7 @@ main() {
 
   start_xvfb
   wait_for_display
+  apply_display_geometry "${SCREEN_WIDTH}" "${SCREEN_HEIGHT}"
   start_window_manager
   set_root_background
   start_window_layout_agent

@@ -295,12 +295,15 @@
           <div class="row">
             <div class="field" style="flex: 1 1 180px;">
               <label for="customArgs">Args</label>
-              <input id="customArgs" type="text" placeholder="--no-sandbox">
+              <input id="customArgs" type="text" placeholder="--no-sandbox --disable-gpu --disable-dev-shm-usage">
             </div>
             <div class="field" style="flex: 1 1 180px;">
               <label for="customWorkdir">Working directory</label>
               <input id="customWorkdir" type="text" placeholder="/opt/app">
             </div>
+          </div>
+          <div class="row" id="customExtractAndRunField">
+            <label class="row"><input id="customExtractAndRun" type="checkbox" checked> Extract and run AppImage</label>
           </div>
           <div class="row">
             <div class="field" style="flex: 1 1 180px;">
@@ -773,7 +776,7 @@
             args: document.getElementById("customArgs").value.trim(),
             preLaunchCommand: document.getElementById("customPreLaunch").value.trim(),
             workingDirectory: document.getElementById("customWorkdir").value.trim(),
-            extractAndRun: sourceType.startsWith("appimage"),
+            extractAndRun: sourceType.startsWith("appimage") ? document.getElementById("customExtractAndRun").checked : false,
           },
           storage: {
             mode: document.getElementById("customStorageMode").value,
@@ -787,10 +790,17 @@
 
     function updateCustomFields() {
       const sourceType = document.getElementById("customSourceType").value;
+      const isAppImage = sourceType === "appimage-url" || sourceType === "appimage-file";
       document.getElementById("customUrlField").hidden = !["appimage-url", "archive-url"].includes(sourceType);
       document.getElementById("customPathField").hidden = !["binary-path", "appimage-file"].includes(sourceType);
       document.getElementById("customCommandField").hidden = sourceType !== "command";
       document.getElementById("customArchiveEntrypointField").hidden = sourceType !== "archive-url";
+      document.getElementById("customExtractAndRunField").hidden = !isAppImage;
+      if (!isAppImage) {
+        document.getElementById("customExtractAndRun").checked = false;
+      } else if (sourceType === "appimage-url") {
+        document.getElementById("customExtractAndRun").checked = true;
+      }
     }
 
     function escapeHtml(value) {
