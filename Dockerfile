@@ -11,10 +11,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   bash \
   ca-certificates \
   curl \
+  desktop-file-utils \
   dbus-x11 \
   fonts-dejavu-core \
+  libcairo2 \
+  libcups2 \
+  libegl1 \
+  libgl1 \
   libappindicator3-1 \
   libasound2 \
+  libatspi2.0-0 \
   libatk-bridge2.0-0 \
   libdrm2 \
   libfuse2 \
@@ -24,9 +30,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libgtk-3-0 \
   libnotify4 \
   libnss3 \
+  libpango-1.0-0 \
   libsecret-1-0 \
   libx11-xcb1 \
+  libxcomposite1 \
+  libxdamage1 \
+  libxfixes3 \
   libxkbcommon0 \
+  libxrandr2 \
   libxshmfence1 \
   libxss1 \
   libxtst6 \
@@ -39,6 +50,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   x11vnc \
   x11-xserver-utils \
   xauth \
+  xdg-utils \
   wmctrl \
   xterm \
   xvfb \
