@@ -6,16 +6,16 @@
   <title>app-web manager</title>
   <style>
     :root {
-      --bg: #efe8dc;
-      --panel: rgba(255, 252, 247, 0.92);
-      --line: rgba(52, 39, 20, 0.12);
-      --ink: #1e160d;
-      --muted: #6f6250;
-      --accent: #b24b17;
-      --accent-2: #0b6f68;
-      --danger: #9d2d1b;
-      --chip: rgba(178, 75, 23, 0.09);
-      --shadow: 0 24px 60px rgba(65, 34, 0, 0.12);
+      --bg: #08111a;
+      --panel: rgba(10, 18, 28, 0.86);
+      --line: rgba(156, 177, 199, 0.16);
+      --ink: #edf4fb;
+      --muted: #9fb2c6;
+      --accent: #f26b3a;
+      --accent-2: #149a8b;
+      --danger: #d24f41;
+      --chip: rgba(242, 107, 58, 0.14);
+      --shadow: 0 30px 70px rgba(0, 0, 0, 0.34);
     }
 
     * { box-sizing: border-box; }
@@ -23,9 +23,9 @@
       margin: 0;
       min-height: 100vh;
       background:
-        radial-gradient(circle at top left, rgba(215, 128, 56, 0.22), transparent 28%),
-        radial-gradient(circle at bottom right, rgba(11, 111, 104, 0.12), transparent 22%),
-        linear-gradient(135deg, #f5efe6, #ebe2d4 48%, #e9dfd2);
+        radial-gradient(circle at top left, rgba(242, 107, 58, 0.16), transparent 24%),
+        radial-gradient(circle at bottom right, rgba(20, 154, 139, 0.14), transparent 22%),
+        linear-gradient(160deg, #071019, #0b1520 48%, #0d1b28);
       color: var(--ink);
       font-family: "Segoe UI", "Helvetica Neue", sans-serif;
       padding: 20px;
@@ -60,7 +60,7 @@
       padding: 14px;
       border: 1px solid var(--line);
       border-radius: 16px;
-      background: rgba(255, 255, 255, 0.62);
+      background: rgba(18, 28, 40, 0.78);
     }
     .metric strong { display: block; font-size: 1.5rem; }
 
@@ -72,8 +72,8 @@
       width: 100%;
       padding: 10px 12px;
       border-radius: 12px;
-      border: 1px solid rgba(58, 41, 20, 0.16);
-      background: rgba(255, 255, 255, 0.82);
+      border: 1px solid rgba(156, 177, 199, 0.2);
+      background: rgba(9, 17, 27, 0.9);
       color: var(--ink);
     }
     textarea { min-height: 92px; resize: vertical; }
@@ -88,7 +88,7 @@
       transition: transform 120ms ease, background 120ms ease;
     }
     button:hover { transform: translateY(-1px); }
-    button.secondary { background: rgba(53, 34, 14, 0.1); color: var(--ink); }
+    button.secondary { background: rgba(156, 177, 199, 0.12); color: var(--ink); }
     button.alt { background: var(--accent-2); }
     button.danger { background: var(--danger); }
     button.ghost {
@@ -107,7 +107,7 @@
       border: 1px solid var(--line);
       border-radius: 16px;
       padding: 14px;
-      background: rgba(255, 255, 255, 0.6);
+      background: rgba(16, 24, 36, 0.8);
       display: grid;
       gap: 10px;
     }
@@ -118,10 +118,10 @@
       padding: 4px 10px;
       border-radius: 999px;
       background: var(--chip);
-      color: #7c3710;
+      color: #ffb08e;
       font-size: 0.85rem;
     }
-    .chip.tag { background: rgba(11, 111, 104, 0.1); color: #0e6059; }
+    .chip.tag { background: rgba(20, 154, 139, 0.14); color: #7ae0d4; }
     .badge {
       display: inline-flex;
       align-items: center;
@@ -129,10 +129,10 @@
       border-radius: 999px;
       font-size: 0.82rem;
     }
-    .badge.ready { background: rgba(40, 109, 52, 0.12); color: #2c6d34; }
-    .badge.starting { background: rgba(163, 112, 0, 0.15); color: #7f5b00; }
-    .badge.stopped, .badge.deleted, .badge.exited { background: rgba(157, 45, 27, 0.12); color: #8d2416; }
-    .favorite { color: #b24b17; font-weight: 700; }
+    .badge.ready { background: rgba(61, 181, 96, 0.16); color: #8de6a4; }
+    .badge.starting { background: rgba(242, 176, 53, 0.18); color: #ffd37c; }
+    .badge.stopped, .badge.deleted, .badge.exited { background: rgba(210, 79, 65, 0.16); color: #ff9e93; }
+    .favorite { color: #ff9f73; font-weight: 700; }
 
     table {
       width: 100%;
@@ -151,20 +151,20 @@
       word-break: break-word;
       font-family: Consolas, "Courier New", monospace;
       font-size: 0.9rem;
-      color: #2e261c;
+      color: #d9e6f2;
     }
     .notice {
       padding: 10px 12px;
       border-radius: 14px;
-      background: rgba(53, 34, 14, 0.06);
+      background: rgba(17, 26, 38, 0.78);
     }
     .notice.success {
-      background: rgba(40, 109, 52, 0.12);
-      color: #2c6d34;
+      background: rgba(61, 181, 96, 0.16);
+      color: #8de6a4;
     }
     .notice.error {
-      background: rgba(157, 45, 27, 0.12);
-      color: #8d2416;
+      background: rgba(210, 79, 65, 0.16);
+      color: #ff9e93;
     }
     .log-box {
       max-height: 360px;
@@ -172,7 +172,7 @@
       border: 1px solid var(--line);
       border-radius: 14px;
       padding: 12px;
-      background: rgba(255, 255, 255, 0.75);
+      background: rgba(8, 14, 22, 0.84);
     }
 
     @media (max-width: 1024px) {

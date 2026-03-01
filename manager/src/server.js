@@ -668,10 +668,19 @@ async function resizeSessionRuntime(session, { width, height, depth }) {
     `xrandr --fb ${width}x${height} >/dev/null 2>&1 || xrandr -s ${width}x${height} >/dev/null 2>&1`,
   ];
 
-  await runtimeClient.execInContainer(session.containerId, resizeCommand);
-  session.app.display.width = width;
-  session.app.display.height = height;
-  session.app.display.depth = depth;
+  try {
+    await runtimeClient.execInContainer(session.containerId, resizeCommand);
+    session.app.display.width = width;
+    session.app.display.height = height;
+    session.app.display.depth = depth;
+  } catch (error) {
+    recordSessionEvent(session, "warn", "session_resize_failed", "Live resize failed", {
+      message: error.message,
+      width,
+      height,
+      depth,
+    });
+  }
 }
 
 function resolveStorage(app, clientId) {
@@ -1000,8 +1009,12 @@ async function restoreSessions() {
 
 async function refreshSessionState(session) {
   try {
+    const previousStatus = session.status;
     const inspection = await runtimeClient.inspectContainer(session.containerId);
     syncSessionFromInspection(session, inspection);
+    if (previousStatus !== session.status && !inspection.State?.Running) {
+      await annotateExitedSession(session, inspection);
+    }
   } catch (error) {
     if (error instanceof DockerError && error.statusCode === 404) {
       session.status = "deleted";
@@ -1011,6 +1024,24 @@ async function refreshSessionState(session) {
     }
     throw error;
   }
+}
+
+async function annotateExitedSession(session, inspection) {
+  const logTail = session.containerId ? await getStartupFailureLogTail(session.containerId) : "";
+  if (!logTail) {
+    return;
+  }
+
+  const exitCode = inspection?.State?.ExitCode;
+  session.lastError = buildStartupFailureMessage(
+    `Session exited with code ${exitCode ?? "unknown"}`,
+    logTail
+  );
+
+  recordSessionEvent(session, "error", "session_runtime_exit", "Session exited after startup", {
+    exitCode,
+    logTail,
+  });
 }
 
 function syncSessionFromInspection(session, inspection) {
