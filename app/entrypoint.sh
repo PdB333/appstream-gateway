@@ -387,10 +387,10 @@ fallback_height="${SCREEN_HEIGHT}"
 
 while true; do
   screen_size="$(xdpyinfo 2>/dev/null | awk '/dimensions:/ { print $2; exit }')"
-  screen_width="${screen_size%x*}"
-  screen_height="${screen_size#*x}"
-  [[ -z "${screen_width}" || "${screen_width}" == "${screen_size}" ]] && screen_width="${fallback_width}"
-  [[ -z "${screen_height}" || "${screen_height}" == "${screen_size}" ]] && screen_height="${fallback_height}"
+  screen_width="\${screen_size%x*}"
+  screen_height="\${screen_size#*x}"
+  [[ -z "\${screen_width}" || "\${screen_width}" == "\${screen_size}" ]] && screen_width="${fallback_width}"
+  [[ -z "\${screen_height}" || "\${screen_height}" == "\${screen_size}" ]] && screen_height="${fallback_height}"
   while read -r window_id desktop host window_class rest; do
     [[ -z "\${window_id}" ]] && continue
     case "\${window_class}" in
