@@ -653,9 +653,9 @@ function buildDockerContainerSpec(session, app, labels, env) {
       ),
       Binds: binds,
       Tmpfs: {
-        "/tmp": "rw,nosuid,nodev,size=536870912",
+        "/tmp": "rw,exec,nosuid,nodev,size=536870912",
         "/run": "rw,nosuid,nodev,size=67108864",
-        "/data": "rw,nosuid,nodev,size=536870912",
+        "/data": "rw,exec,nosuid,nodev,size=536870912",
       },
       CapAdd: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"],
       CapDrop: ["ALL"],
