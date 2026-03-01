@@ -1,214 +1,193 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <script type="text/javascript">
-    window.addEventListener('error', function(e) {
-        setTimeout(function() {
-            window.location.reload()
-        }, 1000)
-    }, true);
-    </script>
-
-    <!--
-    noVNC example: lightweight example using minimal UI and features
-
-    This is a self-contained file which doesn't import WebUtil or external CSS.
-
-    Copyright (C) 2019 The noVNC Authors
-    noVNC is licensed under the MPL 2.0 (see LICENSE.txt)
-    This file is licensed under the 2-Clause BSD license (see LICENSE.txt).
-
-    Connect parameters are provided in query string:
-        http://example.com/?host=HOST&port=PORT&scale=true
-    -->
-    <title>app-web</title>
-
     <meta charset="utf-8">
-
-    <!-- Always force latest IE rendering engine (even in intranet) &
-                Chrome Frame. Remove this if you use the .htaccess -->
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>app-web</title>
     <style>
-
+        html,
         body {
             margin: 0;
-            background-color: black;
+            width: 100%;
             height: 100%;
-            display: flex;
-            flex-direction: column;
-        }
-        html {
-            height: 100%;
+            overflow: hidden;
+            background: #050505;
+            overscroll-behavior: none;
         }
 
-        #top_bar {
-            background-color: #6e84a3;
-            color: white;
-            font: bold 12px Helvetica;
-            padding: 6px 5px 4px 5px;
-            border-bottom: 1px outset;
-        }
-        #status {
-            text-align: center;
-        }
-        #sendCtrlAltDelButton {
+        body {
             position: fixed;
-            top: 0px;
-            right: 0px;
-            border: 1px outset;
-            padding: 5px 5px 4px 5px;
-            cursor: pointer;
+            inset: 0;
         }
 
         #display {
-            flex: 1; /* fill remaining space */
+            position: fixed;
+            inset: 0;
+            width: 100vw;
+            height: 100vh;
             overflow: hidden;
+            background: #050505;
         }
 
-    </style>
+        #display canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+            outline: none;
+            background: #050505;
+        }
 
-    <!-- actual script modules -->
+        #status {
+            position: fixed;
+            left: 50%;
+            bottom: 16px;
+            transform: translateX(-50%);
+            z-index: 20;
+            padding: 8px 12px;
+            border-radius: 999px;
+            background: rgba(10, 12, 16, 0.74);
+            color: #f5f7fa;
+            font: 500 12px/1.2 "Segoe UI", sans-serif;
+            backdrop-filter: blur(10px);
+            transition: opacity 180ms ease;
+        }
+
+        #status.is-hidden {
+            opacity: 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="display"></div>
+    <div id="status">Loading</div>
+
     <script type="module" crossorigin="anonymous">
-        // RFB holds the API to connect and communicate with a VNC server
         import RFB from './core/rfb.js';
 
         let rfb;
-        let desktopName;
+        let desktopName = "";
+        let reconnectTimer = 0;
 
-        // When this function is called we have
-        // successfully connected to a server
-        function connectedToServer(e) {
-            status("Connected to " + desktopName);
+        const display = document.getElementById("display");
+        const statusElement = document.getElementById("status");
+
+        function setStatus(text, autoHide = false) {
+            statusElement.textContent = text;
+            statusElement.classList.remove("is-hidden");
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = 0;
+            }
+            if (autoHide) {
+                reconnectTimer = window.setTimeout(() => {
+                    statusElement.classList.add("is-hidden");
+                }, 1600);
+            }
         }
 
-        // This function is called when we are disconnected
-        function disconnectedFromServer(e) {
-            setTimeout(function() {
-                window.location.reload();
-            }, 1000);
-        }
-
-        // When this function is called, the server requires
-        // credentials to authenticate
-        function credentialsAreRequired(e) {
-            const password = prompt("Password Required:");
-            rfb.sendCredentials({ password: password });
-        }
-
-        // When this function is called we have received
-        // a desktop name from the server
-        function updateDesktopName(e) {
-            desktopName = e.detail.name;
-        }
-
-        // Since most operating systems will catch Ctrl+Alt+Del
-        // before they get a chance to be intercepted by the browser,
-        // we provide a way to emulate this key sequence.
-        function sendCtrlAltDel() {
-            rfb.sendCtrlAltDel();
-            return false;
-        }
-
-        // Show a status text in the top bar
-        function status(text) {
-            document.getElementById('status').textContent = text;
-        }
-
-        // This function extracts the value of one variable from the
-        // query string. If the variable isn't defined in the URL
-        // it returns the default value instead.
         function readQueryVariable(name, defaultValue) {
-            // A URL with a query parameter can look like this:
-            // https://www.example.com?myqueryparam=myvalue
-            //
-            // Note that we use location.href instead of location.search
-            // because Firefox < 53 has a bug w.r.t location.search
-            const re = new RegExp('.*[?&]' + name + '=([^&#]*)'),
-                  match = document.location.href.match(re);
+            const re = new RegExp('.*[?&]' + name + '=([^&#]*)');
+            const match = document.location.href.match(re);
 
             if (match) {
-                // We have to decode the URL since want the cleartext value
                 return decodeURIComponent(match[1]);
             }
 
             return defaultValue;
         }
 
+        function readBooleanQuery(name, defaultValue) {
+            const fallback = defaultValue ? "1" : "0";
+            const value = String(readQueryVariable(name, fallback)).trim().toLowerCase();
+            return !["0", "false", "no", "off", ""].includes(value);
+        }
+
+        function readNumberQuery(name, defaultValue) {
+            const parsed = Number.parseInt(readQueryVariable(name, String(defaultValue)), 10);
+            return Number.isFinite(parsed) ? parsed : defaultValue;
+        }
+
         function defaultWebsockifyPath() {
-            const pathname = window.location.pathname.replace(/\/+$/, '');
-            if (pathname === '') {
-                return 'websockify';
+            const pathname = window.location.pathname.replace(/\/+$/, "");
+            if (pathname === "") {
+                return "websockify";
             }
-            return pathname.replace(/^\//, '') + '/websockify';
+            return pathname.replace(/^\//, "") + "/websockify";
         }
 
-        document.getElementById('sendCtrlAltDelButton')
-            .onclick = sendCtrlAltDel;
-
-        // Read parameters specified in the URL query string
-        // By default, use the host and port of server that served this file
-        const host = readQueryVariable('host', window.location.hostname);
-        let port = readQueryVariable('port', window.location.port);
-        const password = readQueryVariable('password');
-        const path = readQueryVariable('path', defaultWebsockifyPath());
-
-        // | | |         | | |
-        // | | | Connect | | |
-        // v v v         v v v
-
-        status("Connecting");
-
-        // Build the websocket URL used to connect
-        let url;
-        if (window.location.protocol === "https:") {
-            url = 'wss';
-        } else {
-            url = 'ws';
+        function focusCanvas() {
+            const canvas = document.querySelector("#display canvas");
+            if (canvas) {
+                canvas.tabIndex = 0;
+                canvas.focus({ preventScroll: true });
+            }
         }
-        url += '://' + host;
-        if(port) {
-            url += ':' + port;
+
+        function reconnectSoon() {
+            window.setTimeout(() => {
+                window.location.reload();
+            }, readNumberQuery("reconnect_delay", 1000));
         }
-        url += '/' + path;
 
-        // Creating a new RFB object will start a new connection
-        rfb = new RFB(document.getElementById('display'), url,
-                      { credentials: { password: password } });
+        function connectedToServer() {
+            const label = desktopName ? `Connected to ${desktopName}` : "Connected";
+            setStatus(label, true);
+            focusCanvas();
+        }
 
-        // Add listeners to important events from the RFB module
-        rfb.addEventListener("connect",  connectedToServer);
+        function disconnectedFromServer() {
+            setStatus("Connection lost. Reconnecting...");
+            reconnectSoon();
+        }
+
+        function credentialsAreRequired() {
+            const password = prompt("Password Required:");
+            rfb.sendCredentials({ password });
+        }
+
+        function updateDesktopName(e) {
+            desktopName = e.detail.name || "";
+            document.title = desktopName || readQueryVariable("title", "app-web");
+        }
+
+        window.addEventListener("error", () => {
+            reconnectSoon();
+        }, true);
+
+        const host = readQueryVariable("host", window.location.hostname);
+        const port = readQueryVariable("port", window.location.port);
+        const password = readQueryVariable("password");
+        const path = readQueryVariable("path", defaultWebsockifyPath());
+
+        let url = window.location.protocol === "https:" ? "wss" : "ws";
+        url += "://" + host;
+        if (port) {
+            url += ":" + port;
+        }
+        url += "/" + path;
+
+        setStatus("Connecting...");
+        rfb = new RFB(display, url, { credentials: { password } });
+
+        rfb.addEventListener("connect", connectedToServer);
         rfb.addEventListener("disconnect", disconnectedFromServer);
         rfb.addEventListener("credentialsrequired", credentialsAreRequired);
         rfb.addEventListener("desktopname", updateDesktopName);
 
-        // Set parameters that can be changed on an active connection
-        rfb.viewOnly = readQueryVariable('view_only', false);
-        rfb.scaleViewport = readQueryVariable('scale', true);
-        document.title = readQueryVariable('title', 'app-web');
-    </script>
-</head>
+        rfb.viewOnly = readBooleanQuery("view_only", false);
+        rfb.scaleViewport = readBooleanQuery("scale", true);
+        rfb.clipViewport = readBooleanQuery("clip", false);
+        rfb.resizeSession = readBooleanQuery("resize", false);
+        rfb.qualityLevel = readNumberQuery("quality", 9);
+        rfb.compressionLevel = readNumberQuery("compression", 1);
+        rfb.showDotCursor = true;
+        rfb.dragViewport = false;
+        rfb.focusOnClick = true;
+        document.title = readQueryVariable("title", "app-web");
 
-<body>
-    <style>
-      #top_bar {
-        display: none;
-      }
-    </style>
-    <div id="top_bar">
-        <div id="status">Loading</div>
-        <div id="sendCtrlAltDelButton">Send CtrlAltDel</div>
-    </div>
-    <div id="display">
-        <!-- This is where the remote screen will appear -->
-    </div>
-<script>
-setInterval(function() {
-    let canvas = document.querySelector("canvas")
-    if (canvas != null) {
-        canvas.focus()
-    }
-}, 250)
-</script>
+        window.addEventListener("resize", focusCanvas);
+        window.setInterval(focusCanvas, 250);
+    </script>
 </body>
 </html>

@@ -37,7 +37,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   x11-apps \
   x11-utils \
   x11vnc \
+  x11-xserver-utils \
   xauth \
+  wmctrl \
   xterm \
   xvfb \
   && rm -rf /var/lib/apt/lists/*

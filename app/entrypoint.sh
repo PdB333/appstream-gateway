@@ -29,6 +29,9 @@ SCREEN_DEPTH="${SCREEN_DEPTH:-24}"
 NOVNC_WEB_ROOT="${NOVNC_WEB_ROOT:-/app/public}"
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-${APP_USER}}"
 LOG_DIR="${LOG_DIR:-/tmp/app-web-logs}"
+APP_WINDOW_MODE="${APP_WINDOW_MODE:-immersive}"
+X11VNC_NCACHE="${X11VNC_NCACHE:-10}"
+X11VNC_NOXDAMAGE="${X11VNC_NOXDAMAGE:-1}"
 
 declare -a pids=()
 app_pid=""
@@ -59,6 +62,13 @@ emit_log() {
     "$(json_escape "${APP_SESSION_ID}")" \
     "$(json_escape "${APP_NAME}")" \
     "$(json_escape "${message}")" >&2
+}
+
+is_enabled() {
+  case "${1:-}" in
+    1|true|TRUE|yes|YES|on|ON) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 cleanup() {
@@ -97,7 +107,7 @@ prepare_directories() {
     "${LOG_DIR}" \
     /tmp \
     /tmp/.X11-unix
-  touch "${LOG_DIR}/xvfb.log" "${LOG_DIR}/openbox.log" "${LOG_DIR}/x11vnc.log" "${LOG_DIR}/websockify.log" "${LOG_DIR}/app.log"
+  touch "${LOG_DIR}/xvfb.log" "${LOG_DIR}/openbox.log" "${LOG_DIR}/x11vnc.log" "${LOG_DIR}/websockify.log" "${LOG_DIR}/window-agent.log" "${LOG_DIR}/app.log"
   chmod 1777 /tmp /tmp/.X11-unix
   chmod 0700 "${XDG_RUNTIME_DIR}"
   chown -R "${APP_USER}:${APP_USER}" "${APP_CACHE_DIR}" "${DATA_DIR}" "${XDG_RUNTIME_DIR}" "${SESSION_HOME}"
@@ -120,6 +130,7 @@ start_log_forwarders() {
   tail_component_log "openbox" "${LOG_DIR}/openbox.log"
   tail_component_log "x11vnc" "${LOG_DIR}/x11vnc.log"
   tail_component_log "websockify" "${LOG_DIR}/websockify.log"
+  tail_component_log "window_agent" "${LOG_DIR}/window-agent.log"
   tail_component_log "app" "${LOG_DIR}/app.log"
 }
 
@@ -338,13 +349,73 @@ start_window_manager() {
     XDG_CONFIG_HOME="${SESSION_HOME}/.config" \
     XDG_CACHE_HOME="${SESSION_HOME}/.cache" \
     XDG_DATA_HOME="${SESSION_HOME}/.local/share" \
-    openbox >>"${LOG_DIR}/openbox.log" 2>&1 &
+    openbox --sm-disable >>"${LOG_DIR}/openbox.log" 2>&1 &
+  pids+=("$!")
+}
+
+set_root_background() {
+  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" HOME="${SESSION_HOME}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" xsetroot -solid "#050505" >>"${LOG_DIR}/window-agent.log" 2>&1 || true
+}
+
+start_window_layout_agent() {
+  if [[ "${APP_WINDOW_MODE}" != "immersive" ]]; then
+    return
+  fi
+
+  emit_log "info" "window_agent_start" "Starting immersive window layout agent"
+
+  cat > /tmp/window-layout-agent.sh <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+export DISPLAY="${DISPLAY}"
+export HOME="${SESSION_HOME}"
+export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
+screen_width="${SCREEN_WIDTH}"
+screen_height="${SCREEN_HEIGHT}"
+
+while true; do
+  while read -r window_id desktop host window_class rest; do
+    [[ -z "\${window_id}" ]] && continue
+    case "\${window_class}" in
+      *Openbox*|*openbox*|*Desktop*|*desktop_window*) continue ;;
+    esac
+    wmctrl -i -r "\${window_id}" -b add,maximized_vert,maximized_horz,fullscreen >/dev/null 2>&1 || true
+    wmctrl -i -r "\${window_id}" -e "0,0,0,\${screen_width},\${screen_height}" >/dev/null 2>&1 || true
+    wmctrl -i -a "\${window_id}" >/dev/null 2>&1 || true
+  done < <(wmctrl -lx 2>/dev/null)
+  sleep 1
+done
+EOF
+
+  chmod 0755 /tmp/window-layout-agent.sh
+  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" HOME="${SESSION_HOME}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" /tmp/window-layout-agent.sh >>"${LOG_DIR}/window-agent.log" 2>&1 &
   pids+=("$!")
 }
 
 start_x11vnc() {
+  local -a x11vnc_args=(
+    -display "${DISPLAY}"
+    -shared
+    -forever
+    -localhost
+    -nopw
+    -rfbport "${VNC_PORT}"
+    -xkb
+    -repeat
+    -wait 10
+    -defer 10
+  )
+
+  if is_enabled "${X11VNC_NOXDAMAGE}"; then
+    x11vnc_args+=(-noxdamage)
+  fi
+
+  if [[ "${X11VNC_NCACHE}" != "0" ]]; then
+    x11vnc_args+=(-ncache "${X11VNC_NCACHE}" -ncache_cr)
+  fi
+
   emit_log "info" "x11vnc_start" "Starting x11vnc"
-  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" x11vnc -display "${DISPLAY}" -shared -forever -localhost -nopw -rfbport "${VNC_PORT}" >>"${LOG_DIR}/x11vnc.log" 2>&1 &
+  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" x11vnc "${x11vnc_args[@]}" >>"${LOG_DIR}/x11vnc.log" 2>&1 &
   pids+=("$!")
 }
 
@@ -372,6 +443,8 @@ main() {
   start_xvfb
   wait_for_display
   start_window_manager
+  set_root_background
+  start_window_layout_agent
   start_x11vnc
   wait_for_port 127.0.0.1 "${VNC_PORT}"
   start_websockify
