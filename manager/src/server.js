@@ -437,6 +437,36 @@ function markSessionReused(session) {
   return session;
 }
 
+async function getStartupFailureLogTail(containerId) {
+  try {
+    const logs = await runtimeClient.getContainerLogs(containerId, {
+      tail: Math.min(config.sessionLogTail, 80),
+      timestamps: true,
+    });
+    return summarizeLogTail(logs, 20);
+  } catch (error) {
+    return "Unable to fetch startup logs: " + error.message;
+  }
+}
+
+function buildStartupFailureMessage(message, logTail) {
+  if (!logTail) {
+    return message;
+  }
+  return message + "\n\nLast container logs:\n" + logTail;
+}
+
+function summarizeLogTail(logs, maxLines = 20) {
+  if (!logs) {
+    return "";
+  }
+  return logs
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .slice(-maxLines)
+    .join("\n");
+}
+
 async function createSession(app, { clientId }) {
   const now = Date.now();
   const sessionId = createSessionId();
@@ -500,9 +530,13 @@ async function createSession(app, { clientId }) {
     });
   } catch (error) {
     metrics.sessionsFailedTotal += 1;
-    session.lastError = error.message;
+    const startupFailureLogTail = session.containerId
+      ? await getStartupFailureLogTail(session.containerId)
+      : "";
+    session.lastError = buildStartupFailureMessage(error.message, startupFailureLogTail);
     recordSessionEvent(session, "error", "session_failed", "Session startup failed", {
       message: error.message,
+      logTail: startupFailureLogTail || undefined,
     });
 
     try {
@@ -518,6 +552,8 @@ async function createSession(app, { clientId }) {
       });
       sessions.delete(session.id);
     }
+
+    error.message = session.lastError;
     throw error;
   }
 
