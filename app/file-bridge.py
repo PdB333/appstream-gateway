@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Session bridge server: file/URL forwarding, clipboard sync, file upload.
+"""Session bridge server: file/URL forwarding, clipboard sync, file upload, download watcher.
 
 Runs inside the session container on FILE_BRIDGE_PORT (default 9091).
 
 Endpoints:
-  GET  /pending       → JSON array of pending open-requests (xdg-open bridge)
+  GET  /pending       → JSON array of pending open-requests (xdg-open bridge + downloads)
   GET  /file/<id>     → Download a bridged file by ID
   GET  /ack/<id>      → Acknowledge (remove) a pending item
   GET  /clipboard     → Read the X11 clipboard (session → host)
@@ -13,10 +13,13 @@ Endpoints:
   GET  /health        → Health check
 """
 
+import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
+import threading
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -30,13 +33,22 @@ PORT = int(os.environ.get("FILE_BRIDGE_PORT", "9091"))
 HOST = os.environ.get("FILE_BRIDGE_HOST", "0.0.0.0")
 DISPLAY = os.environ.get("DISPLAY", ":0")
 
+# Download watcher config
+DOWNLOAD_DIR = Path(os.environ.get("SESSION_HOME", "/data/home")) / "Downloads"
+DOWNLOAD_WATCH_INTERVAL = float(os.environ.get("DOWNLOAD_WATCH_INTERVAL", "1.5"))
+
 PENDING_DIR.mkdir(parents=True, exist_ok=True)
 FILES_DIR.mkdir(parents=True, exist_ok=True)
+DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 SAFE_ID = re.compile(r"^[a-zA-Z0-9._-]+$")
 # Track clipboard to detect changes (session → host)
 _last_clipboard = ""
 _last_clipboard_time = 0
+
+# Track files we've already forwarded (to avoid duplicates)
+_forwarded_files = set()
+_forwarded_lock = threading.Lock()
 
 
 def read_x_clipboard():
@@ -79,6 +91,97 @@ def write_x_clipboard(text):
         except (FileNotFoundError, subprocess.TimeoutExpired):
             continue
     return False
+
+
+def bridge_file(filepath):
+    """Copy a file into the bridge and create a pending entry for host download."""
+    filepath = Path(filepath)
+    if not filepath.is_file():
+        return None
+
+    # Generate stable ID from path + mtime + size
+    stat = filepath.stat()
+    key = f"{filepath}:{stat.st_mtime}:{stat.st_size}"
+    file_id = hashlib.sha256(key.encode()).hexdigest()[:16]
+
+    # Check if already forwarded
+    with _forwarded_lock:
+        if key in _forwarded_files:
+            return None
+        _forwarded_files.add(key)
+
+    # Copy file to bridge
+    ext = filepath.suffix
+    bridge_path = FILES_DIR / f"{file_id}{ext}"
+    shutil.copy2(filepath, bridge_path)
+
+    # Create pending entry
+    entry = {
+        "id": file_id,
+        "type": "file",
+        "name": filepath.name,
+        "size": stat.st_size,
+        "ts": time.time(),
+        "source": "download-watcher",
+    }
+    (PENDING_DIR / f"{file_id}.json").write_text(json.dumps(entry))
+    return file_id
+
+
+def download_watcher():
+    """Watch the Downloads directory for new files and bridge them to the host."""
+    import sys
+    print(f"Download watcher started: {DOWNLOAD_DIR}", file=sys.stderr, flush=True)
+
+    # Track known files at startup (don't forward existing files)
+    known = set()
+    if DOWNLOAD_DIR.exists():
+        for f in DOWNLOAD_DIR.iterdir():
+            if f.is_file() and not f.name.endswith((".part", ".crdownload", ".tmp")):
+                stat = f.stat()
+                known.add(f"{f}:{stat.st_mtime}:{stat.st_size}")
+
+    while True:
+        try:
+            time.sleep(DOWNLOAD_WATCH_INTERVAL)
+            if not DOWNLOAD_DIR.exists():
+                continue
+
+            for f in DOWNLOAD_DIR.iterdir():
+                if not f.is_file():
+                    continue
+                # Skip partial downloads
+                if f.name.endswith((".part", ".crdownload", ".tmp", ".download")):
+                    continue
+                # Skip hidden files
+                if f.name.startswith("."):
+                    continue
+
+                stat = f.stat()
+                key = f"{f}:{stat.st_mtime}:{stat.st_size}"
+
+                # Skip if already known
+                if key in known:
+                    continue
+
+                # Wait a moment to ensure the file is fully written
+                time.sleep(0.5)
+                try:
+                    new_stat = f.stat()
+                    if new_stat.st_size != stat.st_size or new_stat.st_mtime != stat.st_mtime:
+                        # File still being written
+                        continue
+                except FileNotFoundError:
+                    continue
+
+                known.add(key)
+                fid = bridge_file(f)
+                if fid:
+                    print(f"Download forwarded: {f.name} ({stat.st_size} bytes) -> {fid}", file=sys.stderr, flush=True)
+
+        except Exception as e:
+            print(f"Download watcher error: {e}", file=sys.stderr, flush=True)
+            time.sleep(5)
 
 
 class BridgeHandler(BaseHTTPRequestHandler):
@@ -252,6 +355,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
 def main():
     import sys
+
+    # Start download watcher in background thread
+    watcher = threading.Thread(target=download_watcher, daemon=True)
+    watcher.start()
+
     try:
         server = HTTPServer((HOST, PORT), BridgeHandler)
         print(f"File bridge listening on {HOST}:{PORT}", file=sys.stderr, flush=True)

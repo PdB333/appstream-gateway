@@ -123,6 +123,7 @@ prepare_directories() {
     "${SESSION_HOME}/.local/share" \
     "${SESSION_HOME}/.local/share/applications" \
     "${SESSION_HOME}/.pki/nssdb" \
+    "${SESSION_HOME}/Downloads" \
     "${XDG_RUNTIME_DIR}" \
     "${LOG_DIR}" \
     /tmp \

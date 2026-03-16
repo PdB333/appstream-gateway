@@ -107,6 +107,7 @@
     "launch": {
       "args": "--no-sandbox --disable-gpu --disable-dev-shm-usage --disable-gpu-sandbox",
       "extractAndRun": true,
+      "preLaunchCommand": "mkdir -p /data/home/.config/VSCodium/User && test -f /data/home/.config/VSCodium/User/settings.json || echo '{\"files.simpleDialog.enable\":true,\"window.titleBarStyle\":\"custom\",\"telemetry.telemetryLevel\":\"off\"}' > /data/home/.config/VSCodium/User/settings.json",
       "workingDirectory": "/data/home",
       "healthcheckPath": "/"
     },
@@ -290,6 +291,7 @@
     "launch": {
       "args": "--no-remote",
       "extractAndRun": false,
+      "preLaunchCommand": "mkdir -p /data/home/Downloads",
       "workingDirectory": "/data/home",
       "healthcheckPath": "/"
     },
