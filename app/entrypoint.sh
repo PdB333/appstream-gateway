@@ -27,6 +27,7 @@ SCREEN_WIDTH="${SCREEN_WIDTH:-1440}"
 SCREEN_HEIGHT="${SCREEN_HEIGHT:-900}"
 SCREEN_DEPTH="${SCREEN_DEPTH:-24}"
 NOVNC_WEB_ROOT="${NOVNC_WEB_ROOT:-/app/public}"
+FILE_BRIDGE_PORT="${FILE_BRIDGE_PORT:-9091}"
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-${APP_USER}}"
 LOG_DIR="${LOG_DIR:-/tmp/app-web-logs}"
 APP_WINDOW_MODE="${APP_WINDOW_MODE:-immersive}"
@@ -423,6 +424,7 @@ export XDG_CURRENT_DESKTOP="Openbox"
 export NO_AT_BRIDGE=1
 export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
 export MESA_LOADER_DRIVER_OVERRIDE="${MESA_LOADER_DRIVER_OVERRIDE:-llvmpipe}"
+export PATH="/tmp:\${PATH}"
 export ELECTRON_DISABLE_SANDBOX=1
 export ELECTRON_NO_ATTACH_CONSOLE=1
 export ELECTRON_DISABLE_GPU=\${ELECTRON_DISABLE_GPU:-0}
@@ -551,6 +553,9 @@ start_x11vnc() {
     -repeat
     -wait 10
     -defer 10
+    -nocursorshape
+    -nocursorpos
+    -cursor none
   )
 
   if is_enabled "${X11VNC_NOXDAMAGE}"; then
@@ -569,6 +574,22 @@ start_x11vnc() {
 start_websockify() {
   emit_log "info" "websockify_start" "Starting websockify"
   websockify --web "${NOVNC_WEB_ROOT}" "${PORT}" "127.0.0.1:${VNC_PORT}" >>"${LOG_DIR}/websockify.log" 2>&1 &
+  pids+=("$!")
+}
+
+start_file_bridge() {
+  local bridge_dir="/tmp/file-bridge"
+  mkdir -p "${bridge_dir}/pending" "${bridge_dir}/files"
+  chown -R "${APP_USER}:${APP_USER}" "${bridge_dir}"
+
+  # Install our xdg-open override ahead of the system one in PATH
+  cp /app/xdg-open-bridge.sh /tmp/xdg-open
+  chmod 0755 /tmp/xdg-open
+  chown "${APP_USER}:${APP_USER}" /tmp/xdg-open
+
+  # Start the Python file bridge server
+  emit_log "info" "file_bridge_start" "Starting file bridge on port ${FILE_BRIDGE_PORT:-9091}"
+  runuser -u "${APP_USER}" -- python3 /app/file-bridge.py &
   pids+=("$!")
 }
 
@@ -629,6 +650,7 @@ main() {
   wait_for_port 127.0.0.1 "${VNC_PORT}"
   start_websockify
   wait_for_port 127.0.0.1 "${PORT}"
+  start_file_bridge
   start_dbus
   start_application
 

@@ -71,7 +71,8 @@ RUN dbus-uuidgen > /etc/machine-id 2>/dev/null || true \
 
 WORKDIR /app
 COPY app /app
-RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod 0755 /app/entrypoint.sh
+RUN sed -i 's/\r$//' /app/entrypoint.sh /app/xdg-open-bridge.sh /app/file-bridge.py 2>/dev/null || true \
+  && chmod 0755 /app/entrypoint.sh /app/xdg-open-bridge.sh /app/file-bridge.py
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=20s --retries=3 CMD \
   curl --fail --silent http://127.0.0.1:${PORT}/ >/dev/null || exit 1

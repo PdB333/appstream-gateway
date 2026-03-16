@@ -42,6 +42,10 @@
             background: #050505;
         }
 
+        #display.local-cursor canvas {
+            cursor: default !important;
+        }
+
         #hud {
             position: fixed;
             top: 12px;
@@ -107,6 +111,7 @@
             <div id="status">Loading</div>
         </div>
         <div class="hud-panel">
+            <label class="toggle"><input id="localCursor" type="checkbox">Local cursor</label>
             <label class="toggle"><input id="closeOnUnload" type="checkbox">Close app with tab</label>
             <label class="toggle"><input id="confirmOnClose" type="checkbox">Warn on close</label>
             <button id="closeAppButton" type="button">Close app</button>
@@ -128,17 +133,30 @@
 
         const display = document.getElementById("display");
         const statusElement = document.getElementById("status");
+        const localCursorInput = document.getElementById("localCursor");
         const closeOnUnloadInput = document.getElementById("closeOnUnload");
         const confirmOnCloseInput = document.getElementById("confirmOnClose");
         const closeAppButton = document.getElementById("closeAppButton");
         const sessionMatch = window.location.pathname.match(/^\/sessions\/([a-z0-9]+)/);
         const sessionId = sessionMatch ? sessionMatch[1] : "";
         const sessionToken = new URL(window.location.href).searchParams.get("token") || "";
+        const localCursorKey = "appWeb.localCursor";
         const closeOnUnloadKey = "appWeb.closeOnUnload";
         const confirmOnCloseKey = "appWeb.confirmOnClose";
 
+        function applyLocalCursor(enabled) {
+            display.classList.toggle("local-cursor", enabled);
+        }
+
+        localCursorInput.checked = localStorage.getItem(localCursorKey) !== "0";
+        applyLocalCursor(localCursorInput.checked);
         closeOnUnloadInput.checked = localStorage.getItem(closeOnUnloadKey) !== "0";
         confirmOnCloseInput.checked = localStorage.getItem(confirmOnCloseKey) !== "0";
+
+        localCursorInput.addEventListener("change", () => {
+            localStorage.setItem(localCursorKey, localCursorInput.checked ? "1" : "0");
+            applyLocalCursor(localCursorInput.checked);
+        });
 
         closeOnUnloadInput.addEventListener("change", () => {
             localStorage.setItem(closeOnUnloadKey, closeOnUnloadInput.checked ? "1" : "0");
@@ -385,6 +403,47 @@
 
         focusCanvas();
         window.setInterval(focusCanvas, 250);
+
+        // ── File/URL bridge: poll for xdg-open requests from the remote session ──
+        function bridgeUrl(endpoint) {
+            const base = sessionMatch
+                ? `/sessions/${sessionId}/bridge`
+                : "/bridge";
+            const url = new URL(`${base}${endpoint}`, window.location.origin);
+            if (sessionToken) url.searchParams.set("token", sessionToken);
+            return url;
+        }
+
+        async function pollFileBridge() {
+            try {
+                const res = await fetch(bridgeUrl("/pending"), { credentials: "same-origin" });
+                if (!res.ok) return;
+                const items = await res.json();
+                for (const item of items) {
+                    if (item.type === "url") {
+                        window.open(item.url, "_blank", "noopener");
+                    } else if (item.type === "file") {
+                        const fileUrl = bridgeUrl(`/file/${item.id}`);
+                        const a = document.createElement("a");
+                        a.href = fileUrl.toString();
+                        a.download = item.name || "download";
+                        a.style.display = "none";
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                    }
+                    // Acknowledge to remove from pending
+                    fetch(bridgeUrl(`/ack/${item.id}`), {
+                        method: "POST",
+                        credentials: "same-origin",
+                    }).catch(() => {});
+                }
+            } catch {
+                // bridge not yet running or session not ready
+            }
+        }
+
+        window.setInterval(pollFileBridge, 2000);
     </script>
 </body>
 </html>

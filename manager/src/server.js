@@ -1404,15 +1404,19 @@ async function proxySessionHttp(request, response, url) {
   metrics.proxyHttpRequestsTotal += 1;
 
   const targetPath = buildTargetPath(route.innerPath, url.searchParams);
+  // Route /bridge/* requests to the file bridge port (9091) inside the session
+  const isBridge = route.innerPath.startsWith("/bridge/") || route.innerPath === "/bridge";
+  const upstreamPort = isBridge ? 9091 : config.sessionInternalPort;
+  const upstreamPath = isBridge ? route.innerPath.replace(/^\/bridge/, "") || "/" : targetPath;
   const upstream = http.request(
     {
       hostname: session.runtimeHost || session.containerName,
-      port: config.sessionInternalPort,
-      path: targetPath,
+      port: upstreamPort,
+      path: buildTargetPath(upstreamPath, url.searchParams),
       method: request.method,
       headers: {
         ...request.headers,
-        host: `${session.runtimeHost || session.containerName}:${config.sessionInternalPort}`,
+        host: `${session.runtimeHost || session.containerName}:${upstreamPort}`,
       },
     },
     (upstreamResponse) => {
