@@ -62,6 +62,9 @@ const config = {
   defaultStorageMode: process.env.DEFAULT_STORAGE_MODE || "ephemeral",
   resumeSessions: parseBoolean(process.env.RESUME_SESSIONS, true),
   stoppedSessionGraceMs: parseDurationMs(process.env.STOPPED_SESSION_GRACE, 5 * 60 * 1000),
+  tmpSizeMb: parseInteger(process.env.SESSION_TMP_SIZE_MB, 2048),
+  dataSizeMb: parseInteger(process.env.SESSION_DATA_SIZE_MB, 2048),
+  shmSizeMb: parseInteger(process.env.SESSION_SHM_SIZE_MB, 256),
   sessionLogTail: parseInteger(process.env.SESSION_LOG_TAIL, 200),
   maxManagerEvents: parseInteger(process.env.MAX_MANAGER_EVENTS, 300),
   maxSessionEvents: parseInteger(process.env.MAX_SESSION_EVENTS, 120),
@@ -761,6 +764,10 @@ function buildDockerContainerSpec(session, app, labels, env) {
     binds.push(`${session.storage.homeVolumeName}:/data/home`);
   }
 
+  const tmpSizeBytes = config.tmpSizeMb * 1024 * 1024;
+  const dataSizeBytes = config.dataSizeMb * 1024 * 1024;
+  const shmSizeBytes = config.shmSizeMb * 1024 * 1024;
+
   return {
     Image: config.sessionImage,
     WorkingDir: "/app",
@@ -774,13 +781,14 @@ function buildDockerContainerSpec(session, app, labels, env) {
       NanoCpus: Math.round(
         Math.max(0.1, Number(app.resources.cpuCores || config.defaultCpuCores)) * 1_000_000_000
       ),
+      ShmSize: shmSizeBytes,
       Binds: binds,
       Tmpfs: {
-        "/tmp": "rw,exec,nosuid,nodev,size=536870912",
+        "/tmp": `rw,exec,nosuid,nodev,size=${tmpSizeBytes}`,
         "/run": "rw,nosuid,nodev,size=67108864",
-        "/data": "rw,exec,nosuid,nodev,size=536870912",
+        "/data": `rw,exec,nosuid,nodev,size=${dataSizeBytes}`,
       },
-      CapAdd: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"],
+      CapAdd: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE", "SYS_ADMIN"],
       CapDrop: ["ALL"],
       SecurityOpt: ["no-new-privileges:true"],
     },
@@ -790,15 +798,20 @@ function buildDockerContainerSpec(session, app, labels, env) {
 function buildKubernetesPodSpec(session, app, labels, env) {
   const memoryLimit = `${Math.max(128, Number(app.resources.memoryMb || config.defaultMemoryMb))}Mi`;
   const cpuLimit = String(Math.max(0.1, Number(app.resources.cpuCores || config.defaultCpuCores)));
+  const tmpSizeLimit = `${config.tmpSizeMb}Mi`;
+  const dataSizeLimit = `${config.dataSizeMb}Mi`;
+  const shmSizeLimit = `${config.shmSizeMb}Mi`;
   const volumes = [
-    { name: "tmp", emptyDir: {} },
+    { name: "tmp", emptyDir: { sizeLimit: tmpSizeLimit } },
     { name: "run", emptyDir: {} },
-    { name: "data", emptyDir: {} },
+    { name: "data", emptyDir: { sizeLimit: dataSizeLimit } },
+    { name: "dshm", emptyDir: { medium: "Memory", sizeLimit: shmSizeLimit } },
   ];
   const volumeMounts = [
     { name: "tmp", mountPath: "/tmp" },
     { name: "run", mountPath: "/run" },
     { name: "data", mountPath: "/data" },
+    { name: "dshm", mountPath: "/dev/shm" },
   ];
 
   if (config.k8sSessionCacheClaim) {
@@ -875,7 +888,7 @@ function buildKubernetesPodSpec(session, app, labels, env) {
             allowPrivilegeEscalation: false,
             readOnlyRootFilesystem: true,
             capabilities: {
-              add: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE"],
+              add: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE", "SYS_ADMIN"],
               drop: ["ALL"],
             },
           },

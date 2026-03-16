@@ -105,6 +105,8 @@ prepare_directories() {
     "${SESSION_HOME}/.config" \
     "${SESSION_HOME}/.cache" \
     "${SESSION_HOME}/.local/share" \
+    "${SESSION_HOME}/.local/share/applications" \
+    "${SESSION_HOME}/.pki/nssdb" \
     "${XDG_RUNTIME_DIR}" \
     "${LOG_DIR}" \
     /tmp \
@@ -112,6 +114,13 @@ prepare_directories() {
   touch "${LOG_DIR}/xvfb.log" "${LOG_DIR}/openbox.log" "${LOG_DIR}/x11vnc.log" "${LOG_DIR}/websockify.log" "${LOG_DIR}/window-agent.log" "${LOG_DIR}/app.log"
   chmod 1777 /tmp /tmp/.X11-unix
   chmod 0700 "${XDG_RUNTIME_DIR}"
+
+  # Ensure /dev/shm exists and is writable (critical for Chromium/Electron apps)
+  if [[ ! -d /dev/shm ]]; then
+    mkdir -p /dev/shm 2>/dev/null || true
+  fi
+  chmod 1777 /dev/shm 2>/dev/null || true
+
   chown -R "${APP_USER}:${APP_USER}" "${APP_CACHE_DIR}" "${DATA_DIR}" "${XDG_RUNTIME_DIR}" "${SESSION_HOME}"
 }
 
@@ -316,7 +325,7 @@ write_app_script() {
 
   cat > /tmp/start-app.sh <<EOF
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 export HOME="${SESSION_HOME}"
 export USER="${APP_USER}"
 export LOGNAME="${APP_USER}"
@@ -330,7 +339,12 @@ export XDG_CURRENT_DESKTOP="Openbox"
 export NO_AT_BRIDGE=1
 export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
 export MESA_LOADER_DRIVER_OVERRIDE="${MESA_LOADER_DRIVER_OVERRIDE:-llvmpipe}"
+export ELECTRON_DISABLE_SANDBOX=1
+export ELECTRON_NO_ATTACH_CONSOLE=1
+export ELECTRON_DISABLE_GPU=\${ELECTRON_DISABLE_GPU:-0}
+export CHROME_DEVEL_SANDBOX=""
 mkdir -p "\${XDG_CONFIG_HOME}" "\${XDG_CACHE_HOME}" "\${XDG_DATA_HOME}" "\${HOME}"
+mkdir -p "\${HOME}/.config" "\${HOME}/.local/share" "\${HOME}/.cache"
 EOF
 
   if [[ -n "${RESOLVED_WORKDIR}" ]]; then
@@ -338,7 +352,7 @@ EOF
   fi
   if [[ -n "${APP_PRE_LAUNCH_COMMAND}" ]]; then
     printf 'APP_PRE_LAUNCH_COMMAND=%q\n' "${APP_PRE_LAUNCH_COMMAND}" >> /tmp/start-app.sh
-    printf '/bin/bash -lc "$APP_PRE_LAUNCH_COMMAND"\n' >> /tmp/start-app.sh
+    printf '/bin/bash -lc "$APP_PRE_LAUNCH_COMMAND" || true\n' >> /tmp/start-app.sh
   fi
   printf 'APP_LAUNCH_COMMAND=%q\n' "${RESOLVED_COMMAND}" >> /tmp/start-app.sh
   printf 'exec /bin/bash -lc "$APP_LAUNCH_COMMAND"\n' >> /tmp/start-app.sh
@@ -378,30 +392,60 @@ start_window_layout_agent() {
 
   cat > /tmp/window-layout-agent.sh <<EOF
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 export DISPLAY="${DISPLAY}"
 export HOME="${SESSION_HOME}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
 fallback_width="${SCREEN_WIDTH}"
 fallback_height="${SCREEN_HEIGHT}"
 
+# Track which windows we already maximized so we don't fight with user resizes
+declare -A handled_windows
+
 while true; do
-  screen_size="$(xdpyinfo 2>/dev/null | awk '/dimensions:/ { print $2; exit }')"
+  screen_size="\$(xdpyinfo 2>/dev/null | awk '/dimensions:/ { print \$2; exit }')"
   screen_width="\${screen_size%x*}"
   screen_height="\${screen_size#*x}"
   [[ -z "\${screen_width}" || "\${screen_width}" == "\${screen_size}" ]] && screen_width="\${fallback_width}"
   [[ -z "\${screen_height}" || "\${screen_height}" == "\${screen_size}" ]] && screen_height="\${fallback_height}"
+
+  current_windows=""
   while read -r window_id desktop host window_class rest; do
     [[ -z "\${window_id}" ]] && continue
+    current_windows="\${current_windows} \${window_id}"
+
+    # Skip WM windows and already-handled windows
     case "\${window_class}" in
       *Openbox*|*openbox*|*Desktop*|*desktop_window*) continue ;;
     esac
+
+    # Skip dialog/transient/splash windows - let the app manage them
+    win_type="\$(xprop -id "\${window_id}" _NET_WM_WINDOW_TYPE 2>/dev/null || true)"
+    case "\${win_type}" in
+      *DIALOG*|*SPLASH*|*POPUP*|*TOOLTIP*|*NOTIFICATION*|*UTILITY*|*MENU*|*DROPDOWN*|*COMBO*)
+        continue ;;
+    esac
+
+    # Only maximize a window once (first time we see it)
+    if [[ -n "\${handled_windows[\${window_id}]+x}" ]]; then
+      continue
+    fi
+
     xprop -id "\${window_id}" -f _MOTIF_WM_HINTS 32c -set _MOTIF_WM_HINTS "2, 0, 0, 0, 0" >/dev/null 2>&1 || true
-    wmctrl -i -r "\${window_id}" -b add,maximized_vert,maximized_horz,fullscreen >/dev/null 2>&1 || true
+    wmctrl -i -r "\${window_id}" -b add,maximized_vert,maximized_horz >/dev/null 2>&1 || true
     wmctrl -i -r "\${window_id}" -e "0,0,0,\${screen_width},\${screen_height}" >/dev/null 2>&1 || true
     wmctrl -i -a "\${window_id}" >/dev/null 2>&1 || true
+    handled_windows["\${window_id}"]=1
   done < <(wmctrl -lx 2>/dev/null)
-  sleep 1
+
+  # Prune closed windows from the handled set
+  for wid in "\${!handled_windows[@]}"; do
+    if [[ "\${current_windows}" != *"\${wid}"* ]]; then
+      unset handled_windows["\${wid}"]
+    fi
+  done
+
+  sleep 0.5
 done
 EOF
 

@@ -14,10 +14,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   desktop-file-utils \
   dbus-x11 \
   fonts-dejavu-core \
+  fonts-liberation \
+  fonts-noto-color-emoji \
   libcairo2 \
   libcups2 \
   libegl1 \
   libgl1 \
+  libglu1-mesa \
   libappindicator3-1 \
   libasound2 \
   libatspi2.0-0 \
@@ -25,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libdrm2 \
   libfuse2 \
   libgbm1 \
+  libgconf-2-4 \
   libgdk-pixbuf2.0-0 \
   libglib2.0-0 \
   libgtk-3-0 \
@@ -37,11 +41,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libxdamage1 \
   libxfixes3 \
   libxkbcommon0 \
+  libxkbfile1 \
   libxrandr2 \
   libxshmfence1 \
   libxss1 \
   libxtst6 \
+  mesa-utils \
   openbox \
+  procps \
   python3-websockify \
   tini \
   unzip \
