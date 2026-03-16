@@ -418,9 +418,13 @@ async function handleSessionApi(request, response, url) {
     const app = resolveRequestedApp(body);
     const clientId = getClientId(request, body);
     const resumeIfExists = body.resumeIfExists !== false;
-    const existingSession =
+    const reusableSession =
       resumeIfExists && app.session.resume && clientId
         ? findReusableSession(app.id, clientId)
+        : null;
+    const existingSession =
+      reusableSession && (await ensureReusableSessionHealthy(reusableSession))
+        ? reusableSession
         : null;
 
     if (existingSession) {
@@ -451,9 +455,13 @@ async function handleDirectAppLaunch(request, response, url) {
 
   const clientId = getOrCreateClientId(request, response, url);
   const resumeIfExists = url.searchParams.get("resume") !== "0";
-  const existingSession =
+  const reusableSession =
     resumeIfExists && app.session.resume && clientId
       ? findReusableSession(app.id, clientId)
+      : null;
+  const existingSession =
+    reusableSession && (await ensureReusableSessionHealthy(reusableSession))
+      ? reusableSession
       : null;
 
   const session =
@@ -482,6 +490,40 @@ function findReusableSession(appId, clientId) {
   }
 
   return null;
+}
+
+async function ensureReusableSessionHealthy(session) {
+  try {
+    await refreshSessionState(session);
+    if (!["ready", "starting"].includes(session.status)) {
+      return false;
+    }
+
+    await waitForSessionReady(session, Math.min(8000, config.sessionReadyTimeoutMs));
+    if (!session.timings.readyAt) {
+      session.timings.readyAt = Date.now();
+    }
+    session.status = "ready";
+    return true;
+  } catch (error) {
+    session.lastError = error.message;
+    recordSessionEvent(
+      session,
+      "warn",
+      "session_reuse_unhealthy",
+      "Existing session is not healthy and will be recreated",
+      { message: error.message }
+    );
+    try {
+      await destroySession(session.id, "reuse_unhealthy");
+    } catch (destroyError) {
+      log("warn", "failed_to_cleanup_unhealthy_session", {
+        sessionId: session.id,
+        message: destroyError.message,
+      });
+    }
+    return false;
+  }
 }
 
 function markSessionReused(session) {
@@ -914,11 +956,11 @@ function buildKubernetesPodSpec(session, app, labels, env) {
   };
 }
 
-async function waitForSessionReady(session) {
+async function waitForSessionReady(session, timeoutMs = config.sessionReadyTimeoutMs) {
   const startedAt = Date.now();
   const probePath = session.app.launch?.healthcheckPath || "/";
 
-  while (Date.now() - startedAt < config.sessionReadyTimeoutMs) {
+  while (Date.now() - startedAt < timeoutMs) {
     session.timings.readinessProbeCount += 1;
     session.timings.lastProbeAt = Date.now();
 
@@ -941,7 +983,7 @@ async function waitForSessionReady(session) {
     await sleep(1000);
   }
 
-  throw new Error(`Session ${session.id} did not become ready within ${config.sessionReadyTimeoutMs}ms`);
+  throw new Error(`Session ${session.id} did not become ready within ${timeoutMs}ms`);
 }
 
 async function restoreSessions() {
@@ -969,7 +1011,7 @@ async function restoreSessions() {
       createdAt: labels["appweb.created-at"] ? Date.parse(labels["appweb.created-at"]) : now,
       lastActivityAt: now,
       sessionTtlMs: config.defaultSessionTtlMs,
-      status: container.State === "running" ? "ready" : container.State || "unknown",
+      status: container.State === "running" ? "starting" : container.State || "unknown",
       app: {
         id: labels["appweb.app-id"] || "unknown",
         name: labels["appweb.app-name"] || "Unknown App",
@@ -1021,7 +1063,7 @@ async function restoreSessions() {
       lastStats: null,
       timings: {
         createStartedAt: labels["appweb.created-at"] ? Date.parse(labels["appweb.created-at"]) : now,
-        readyAt: container.State === "running" ? now : 0,
+        readyAt: 0,
         launchDurationMs: 0,
         readinessProbeCount: 0,
         lastProbeAt: 0,
