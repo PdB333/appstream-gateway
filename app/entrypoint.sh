@@ -140,7 +140,20 @@ prepare_directories() {
 
   chown -R "${APP_USER}:${APP_USER}" "${APP_CACHE_DIR}" "${DATA_DIR}" "${XDG_RUNTIME_DIR}" "${SESSION_HOME}"
 
-  # Rebuild GDK pixbuf cache at runtime (rootfs may be readonly, caches may be stale)
+  # Rebuild GDK pixbuf cache at runtime into a writable location
+  # (ReadonlyRootfs means the default cache path /usr/lib/…/loaders.cache is not writable)
+  local pixbuf_cache="/tmp/gdk-pixbuf-loaders.cache"
+  if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1; then
+    gdk-pixbuf-query-loaders > "${pixbuf_cache}" 2>/dev/null || true
+    if [[ -s "${pixbuf_cache}" ]]; then
+      export GDK_PIXBUF_MODULE_FILE="${pixbuf_cache}"
+      emit_log "info" "pixbuf_cache" "GDK pixbuf cache generated at ${pixbuf_cache} ($(wc -l < "${pixbuf_cache}") lines)"
+    else
+      emit_log "warn" "pixbuf_cache_empty" "GDK pixbuf cache is empty — GTK file dialogs may crash"
+    fi
+  fi
+
+  # Also try updating the system cache (works if rootfs is writable)
   gdk-pixbuf-query-loaders --update-cache 2>/dev/null || true
 }
 
@@ -184,25 +197,39 @@ apply_display_geometry() {
   local height=${2:-${SCREEN_HEIGHT}}
   local mode_name="${width}x${height}"
 
-  # xrandr --fb is the most reliable way to resize the Xvfb framebuffer.
-  # It changes the screen dimensions that apps see without needing RandR 1.2 mode support.
-  # We also try proper mode creation as a fallback for non-Xvfb X servers.
+  # Use cvt to generate proper modeline, then add and switch to the mode.
+  # xrandr --fb alone doesn't change the screen size that apps actually see on Xvfb.
+  # We need proper RandR mode creation + output switching.
   local xrandr_script
-  xrandr_script="$(cat <<XEOF
-# Try framebuffer resize first (most reliable with Xvfb)
-xrandr --fb ${mode_name} 2>/dev/null && exit 0
+  xrandr_script="$(cat <<'XEOF'
+WIDTH=__WIDTH__
+HEIGHT=__HEIGHT__
+MODE_NAME=__MODE_NAME__
 
-# Fallback: RandR mode creation
-OUTPUT=\$(xrandr 2>/dev/null | awk '/ connected/{print \$1; exit}')
-OUTPUT=\${OUTPUT:-screen}
-if ! xrandr 2>/dev/null | grep -q "${mode_name}"; then
-  xrandr --newmode "${mode_name}" 0 ${width} ${width} ${width} ${width} ${height} ${height} ${height} ${height} 2>/dev/null || true
-  xrandr --addmode "\${OUTPUT}" "${mode_name}" 2>/dev/null || true
+OUTPUT=$(xrandr 2>/dev/null | awk '/ connected/{print $1; exit}')
+OUTPUT=${OUTPUT:-screen}
+
+# Check if the mode already exists and is active
+CURRENT=$(xrandr 2>/dev/null | awk '/\*/{print $1; exit}')
+if [ "${CURRENT}" = "${MODE_NAME}" ]; then
+  exit 0
 fi
-xrandr --output "\${OUTPUT}" --mode "${mode_name}" 2>/dev/null || \
-  xrandr -s "${mode_name}" 2>/dev/null || true
+
+# Try simple -s first (works if Xvfb was started at this resolution)
+xrandr -s "${MODE_NAME}" 2>/dev/null && exit 0
+
+# Create mode with dummy modeline (sufficient for Xvfb virtual displays)
+xrandr --newmode "${MODE_NAME}" 0 ${WIDTH} ${WIDTH} ${WIDTH} ${WIDTH} ${HEIGHT} ${HEIGHT} ${HEIGHT} ${HEIGHT} 2>/dev/null || true
+xrandr --addmode "${OUTPUT}" "${MODE_NAME}" 2>/dev/null || true
+xrandr --output "${OUTPUT}" --mode "${MODE_NAME}" 2>/dev/null || \
+  xrandr --fb "${MODE_NAME}" 2>/dev/null || true
 XEOF
   )"
+
+  # Substitute values
+  xrandr_script="${xrandr_script//__WIDTH__/${width}}"
+  xrandr_script="${xrandr_script//__HEIGHT__/${height}}"
+  xrandr_script="${xrandr_script//__MODE_NAME__/${mode_name}}"
 
   runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" sh -c "${xrandr_script}"
 }
@@ -461,6 +488,10 @@ export QT_AUTO_SCREEN_SCALE_FACTOR=\${QT_AUTO_SCREEN_SCALE_FACTOR:-0}
 export QT_SCALE_FACTOR=\${QT_SCALE_FACTOR:-1}
 export XCURSOR_SIZE=\${XCURSOR_SIZE:-24}
 export GTK_THEME=\${GTK_THEME:-Adwaita}
+# Point GTK to the runtime-generated pixbuf loader cache (critical for file dialogs)
+if [[ -f /tmp/gdk-pixbuf-loaders.cache ]]; then
+  export GDK_PIXBUF_MODULE_FILE=/tmp/gdk-pixbuf-loaders.cache
+fi
 mkdir -p "\${XDG_CONFIG_HOME}" "\${XDG_CACHE_HOME}" "\${XDG_DATA_HOME}" "\${HOME}"
 mkdir -p "\${HOME}/.config" "\${HOME}/.local/share" "\${HOME}/.cache"
 mkdir -p "\${HOME}/.kube" "\${HOME}/.k8slens" "\${HOME}/.pki/nssdb"
@@ -480,9 +511,16 @@ EOF
 }
 
 start_xvfb() {
-  emit_log "info" "xvfb_start" "Starting Xvfb"
+  # Start Xvfb at the actual requested resolution — NOT the max.
+  # Starting at 3840x2160 causes apps to render at that huge resolution,
+  # and noVNC scales it down making everything tiny.
+  # For dynamic resize, we create new xrandr modes on the fly.
+  local xvfb_width="${SCREEN_WIDTH}"
+  local xvfb_height="${SCREEN_HEIGHT}"
+
+  emit_log "info" "xvfb_start" "Starting Xvfb at ${xvfb_width}x${xvfb_height}x${SCREEN_DEPTH}"
   runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" Xvfb "${DISPLAY}" \
-    -screen 0 "${XVFB_MAX_WIDTH}x${XVFB_MAX_HEIGHT}x${SCREEN_DEPTH}" \
+    -screen 0 "${xvfb_width}x${xvfb_height}x${SCREEN_DEPTH}" \
     +extension RANDR +extension GLX \
     -dpi 96 \
     -ac -nolisten tcp >>"${LOG_DIR}/xvfb.log" 2>&1 &

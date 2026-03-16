@@ -31,6 +31,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libgconf-2-4 \
   libgdk-pixbuf2.0-0 \
   libgdk-pixbuf2.0-bin \
+  libpng16-16 \
   libglib2.0-0 \
   libgtk-3-0 \
   librsvg2-common \
@@ -72,7 +73,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   xdotool \
   xterm \
   xvfb \
-  && (gdk-pixbuf-query-loaders --update-cache 2>/dev/null || true) \
+  && gdk-pixbuf-query-loaders --update-cache \
+  && echo "=== Pixbuf loaders registered ===" \
+  && gdk-pixbuf-query-loaders 2>/dev/null | grep -E 'module_path|png|svg' || true \
   && (update-mime-database /usr/share/mime 2>/dev/null || true) \
   && (gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null || true) \
   && (gtk-update-icon-cache /usr/share/icons/Adwaita 2>/dev/null || true) \
