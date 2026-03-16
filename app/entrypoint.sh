@@ -141,48 +141,54 @@ prepare_directories() {
   chown -R "${APP_USER}:${APP_USER}" "${APP_CACHE_DIR}" "${DATA_DIR}" "${XDG_RUNTIME_DIR}" "${SESSION_HOME}"
 
   # Rebuild GDK pixbuf cache at runtime into a writable location
-  # (ReadonlyRootfs means the default cache path /usr/lib/…/loaders.cache is not writable)
+  # (ReadonlyRootfs means the default cache path is not writable)
   local pixbuf_cache="/tmp/gdk-pixbuf-loaders.cache"
-  local pixbuf_loaders_dir="/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders"
-  local pixbuf_sys_cache="/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache"
+
+  # Find the pixbuf query-loaders binary (not always in PATH on Ubuntu 22.04)
+  local pixbuf_ql=""
+  pixbuf_ql="$(find /usr/lib -name 'gdk-pixbuf-query-loaders*' -type f 2>/dev/null | head -1)"
+  if [[ -z "${pixbuf_ql}" ]]; then
+    command -v gdk-pixbuf-query-loaders >/dev/null 2>&1 && pixbuf_ql="gdk-pixbuf-query-loaders"
+  fi
+
+  # Find the system loaders dir and cache (arch-independent)
+  local pixbuf_loaders_dir pixbuf_sys_cache
+  pixbuf_loaders_dir="$(find /usr/lib -path '*/gdk-pixbuf-2.0/*/loaders' -type d 2>/dev/null | head -1)"
+  pixbuf_sys_cache="$(find /usr/lib -name 'loaders.cache' -path '*/gdk-pixbuf-2.0/*' 2>/dev/null | head -1)"
 
   # Debug: check if system loaders exist
-  if [[ -d "${pixbuf_loaders_dir}" ]]; then
+  if [[ -n "${pixbuf_loaders_dir}" ]]; then
     local loader_count
     loader_count="$(ls -1 "${pixbuf_loaders_dir}"/libpixbufloader-*.so 2>/dev/null | wc -l)"
-    emit_log "info" "pixbuf_loaders" "Found ${loader_count} pixbuf loader modules in ${pixbuf_loaders_dir}"
-    # Check for PNG loader specifically
-    if [[ -f "${pixbuf_loaders_dir}/libpixbufloader-png.so" ]]; then
+    emit_log "info" "pixbuf_loaders" "Found ${loader_count} pixbuf loaders in ${pixbuf_loaders_dir}"
+    if ls "${pixbuf_loaders_dir}"/libpixbufloader-png.so >/dev/null 2>&1; then
       emit_log "info" "pixbuf_png_ok" "PNG pixbuf loader found"
     else
-      emit_log "error" "pixbuf_png_missing" "PNG pixbuf loader NOT found — GTK will crash on file dialogs"
+      emit_log "error" "pixbuf_png_missing" "PNG pixbuf loader NOT found"
     fi
   else
-    emit_log "error" "pixbuf_loaders_dir_missing" "Pixbuf loaders directory not found: ${pixbuf_loaders_dir}"
+    emit_log "warn" "pixbuf_loaders_dir_missing" "Pixbuf loaders directory not found"
   fi
 
-  if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1; then
-    gdk-pixbuf-query-loaders > "${pixbuf_cache}" 2>/dev/null || true
+  # Generate runtime cache
+  if [[ -n "${pixbuf_ql}" ]]; then
+    "${pixbuf_ql}" > "${pixbuf_cache}" 2>/dev/null || true
     if [[ -s "${pixbuf_cache}" ]]; then
       export GDK_PIXBUF_MODULE_FILE="${pixbuf_cache}"
-      local png_lines
-      png_lines="$(grep -c 'png' "${pixbuf_cache}" 2>/dev/null || echo 0)"
-      emit_log "info" "pixbuf_cache" "GDK pixbuf cache at ${pixbuf_cache}: $(wc -l < "${pixbuf_cache}") lines, ${png_lines} PNG refs"
+      emit_log "info" "pixbuf_cache" "Pixbuf cache: ${pixbuf_cache} ($(wc -l < "${pixbuf_cache}") lines, $(grep -c 'png' "${pixbuf_cache}" 2>/dev/null || echo 0) PNG refs)"
     else
       emit_log "warn" "pixbuf_cache_empty" "Runtime pixbuf cache is empty"
-      # Fall back to system cache
-      if [[ -f "${pixbuf_sys_cache}" ]]; then
+      if [[ -n "${pixbuf_sys_cache}" ]]; then
         export GDK_PIXBUF_MODULE_FILE="${pixbuf_sys_cache}"
-        emit_log "info" "pixbuf_cache_fallback" "Using system pixbuf cache: ${pixbuf_sys_cache}"
+        emit_log "info" "pixbuf_cache_fallback" "Using system cache: ${pixbuf_sys_cache}"
       fi
     fi
-  elif [[ -f "${pixbuf_sys_cache}" ]]; then
+    # Also try system cache update
+    "${pixbuf_ql}" --update-cache 2>/dev/null || true
+  elif [[ -n "${pixbuf_sys_cache}" ]]; then
     export GDK_PIXBUF_MODULE_FILE="${pixbuf_sys_cache}"
-    emit_log "info" "pixbuf_cache_system" "Using system pixbuf cache (gdk-pixbuf-query-loaders not found)"
+    emit_log "info" "pixbuf_cache_system" "Using system cache (query-loaders not found): ${pixbuf_sys_cache}"
   fi
-
-  # Also try updating the system cache (works if rootfs is writable)
-  gdk-pixbuf-query-loaders --update-cache 2>/dev/null || true
 }
 
 tail_component_log() {
@@ -549,13 +555,14 @@ export QT_SCALE_FACTOR=\${QT_SCALE_FACTOR:-1}
 export XCURSOR_SIZE=\${XCURSOR_SIZE:-24}
 export GTK_THEME=\${GTK_THEME:-Adwaita}
 # Force GDK pixbuf loader paths — critical for GTK file dialogs in Electron/AppImage apps.
-# AppImages set LD_LIBRARY_PATH which can break the loader search.
-# We point explicitly to the system loaders baked into the Docker image.
-export GDK_PIXBUF_MODULEDIR=/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders
+# Discover paths dynamically (works across architectures).
+_PB_DIR=\$(find /usr/lib -path '*/gdk-pixbuf-2.0/*/loaders' -type d 2>/dev/null | head -1)
+[[ -n "\${_PB_DIR}" ]] && export GDK_PIXBUF_MODULEDIR="\${_PB_DIR}"
 if [[ -f /tmp/gdk-pixbuf-loaders.cache ]]; then
   export GDK_PIXBUF_MODULE_FILE=/tmp/gdk-pixbuf-loaders.cache
-elif [[ -f /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache ]]; then
-  export GDK_PIXBUF_MODULE_FILE=/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache
+else
+  _PB_CACHE=\$(find /usr/lib -name 'loaders.cache' -path '*/gdk-pixbuf-2.0/*' 2>/dev/null | head -1)
+  [[ -n "\${_PB_CACHE}" ]] && export GDK_PIXBUF_MODULE_FILE="\${_PB_CACHE}"
 fi
 mkdir -p "\${XDG_CONFIG_HOME}" "\${XDG_CACHE_HOME}" "\${XDG_DATA_HOME}" "\${HOME}"
 mkdir -p "\${HOME}/.config" "\${HOME}/.local/share" "\${HOME}/.cache"
@@ -580,11 +587,13 @@ _PIXBUF_WRAPPER=/tmp/_gtk_pixbuf_wrapper.sh
 cat > "${_PIXBUF_WRAPPER}" <<'INNEREOF'
 #!/bin/bash
 # Re-force system pixbuf loaders regardless of what AppRun changed
-export GDK_PIXBUF_MODULEDIR=/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders
+_D=$(find /usr/lib -path '*/gdk-pixbuf-2.0/*/loaders' -type d 2>/dev/null | head -1)
+[ -n "$_D" ] && export GDK_PIXBUF_MODULEDIR="$_D"
 if [ -f /tmp/gdk-pixbuf-loaders.cache ]; then
   export GDK_PIXBUF_MODULE_FILE=/tmp/gdk-pixbuf-loaders.cache
-elif [ -f /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache ]; then
-  export GDK_PIXBUF_MODULE_FILE=/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache
+else
+  _C=$(find /usr/lib -name 'loaders.cache' -path '*/gdk-pixbuf-2.0/*' 2>/dev/null | head -1)
+  [ -n "$_C" ] && export GDK_PIXBUF_MODULE_FILE="$_C"
 fi
 exec "$@"
 INNEREOF
