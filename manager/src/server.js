@@ -39,6 +39,7 @@ const config = {
   sessionImage: process.env.SESSION_IMAGE || "local/app-web-session:latest",
   sessionNetwork: process.env.SESSION_NETWORK || "app-web-sessions",
   sessionInternalPort: parseInteger(process.env.SESSION_INTERNAL_PORT, 8080),
+  sessionBridgePort: parseInteger(process.env.SESSION_BRIDGE_PORT, 9091),
   k8sNamespace: process.env.K8S_NAMESPACE || "",
   k8sSessionPodServiceAccount: process.env.K8S_SESSION_POD_SERVICE_ACCOUNT || "default",
   k8sSessionImagePullPolicy: process.env.K8S_SESSION_IMAGE_PULL_POLICY || "IfNotPresent",
@@ -647,12 +648,22 @@ async function resizeSessionRuntime(session, { width, height, depth }) {
   }
 
   if (
-    session.app.display?.width === width &&
-    session.app.display?.height === height &&
-    session.app.display?.depth === depth
+    session.runtimeDisplay?.width === width &&
+    session.runtimeDisplay?.height === height
   ) {
     return;
   }
+
+  const modeName = `${width}x${height}`;
+  const resizeScript = [
+    `OUTPUT=$(xrandr 2>/dev/null | awk '/ connected/{print $1; exit}')`,
+    `OUTPUT=\${OUTPUT:-screen}`,
+    `if ! xrandr 2>/dev/null | grep -q "${modeName}"; then`,
+    `  xrandr --newmode "${modeName}" 0 ${width} ${width} ${width} ${width} ${height} ${height} ${height} ${height} 2>/dev/null || true`,
+    `  xrandr --addmode "$OUTPUT" "${modeName}" 2>/dev/null || true`,
+    `fi`,
+    `xrandr --output "$OUTPUT" --mode "${modeName}" 2>/dev/null || xrandr -s "${modeName}" 2>/dev/null || xrandr --fb ${modeName} 2>/dev/null || true`,
+  ].join("; ");
 
   const resizeCommand = [
     "runuser",
@@ -667,15 +678,15 @@ async function resizeSessionRuntime(session, { width, height, depth }) {
     "XDG_CACHE_HOME=/data/home/.cache",
     "XDG_DATA_HOME=/data/home/.local/share",
     "sh",
-    "-lc",
-    `xrandr --fb ${width}x${height} >/dev/null 2>&1 || xrandr -s ${width}x${height} >/dev/null 2>&1`,
+    "-c",
+    resizeScript,
   ];
 
   try {
     await runtimeClient.execInContainer(session.containerId, resizeCommand);
-    session.app.display.width = width;
-    session.app.display.height = height;
-    session.app.display.depth = depth;
+    if (!session.runtimeDisplay) session.runtimeDisplay = {};
+    session.runtimeDisplay.width = width;
+    session.runtimeDisplay.height = height;
   } catch (error) {
     recordSessionEvent(session, "warn", "session_resize_failed", "Live resize failed", {
       message: error.message,
@@ -723,6 +734,7 @@ function buildContainerSpec(session, app) {
 
   const env = [
     `PORT=${config.sessionInternalPort}`,
+    `FILE_BRIDGE_PORT=${config.sessionBridgePort}`,
     `APP_SESSION_ID=${session.id}`,
     `APP_NAME=${app.name}`,
     `APP_SOURCE_TYPE=${app.source.type}`,
@@ -1404,9 +1416,9 @@ async function proxySessionHttp(request, response, url) {
   metrics.proxyHttpRequestsTotal += 1;
 
   const targetPath = buildTargetPath(route.innerPath, url.searchParams);
-  // Route /bridge/* requests to the file bridge port (9091) inside the session
+  // Route /bridge/* requests to the file bridge port inside the session
   const isBridge = route.innerPath.startsWith("/bridge/") || route.innerPath === "/bridge";
-  const upstreamPort = isBridge ? 9091 : config.sessionInternalPort;
+  const upstreamPort = isBridge ? config.sessionBridgePort : config.sessionInternalPort;
   const upstreamPath = isBridge ? route.innerPath.replace(/^\/bridge/, "") || "/" : targetPath;
   const upstream = http.request(
     {

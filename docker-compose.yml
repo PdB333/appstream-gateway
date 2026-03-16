@@ -22,6 +22,7 @@ services:
       SESSION_BACKEND: ${SESSION_BACKEND:-docker}
       SESSION_IMAGE: ${SESSION_IMAGE:-local/app-web-session:latest}
       SESSION_NETWORK: ${SESSION_NETWORK:-app-web-sessions}
+      SESSION_BRIDGE_PORT: ${SESSION_BRIDGE_PORT:-9091}
       SESSION_CACHE_VOLUME: ${SESSION_CACHE_VOLUME:-app-web-cache}
       SESSION_SECRET: ${SESSION_SECRET:-change-this-before-prod}
       ADMIN_API_TOKEN: ${ADMIN_API_TOKEN:-}

@@ -128,6 +128,7 @@ prepare_directories() {
     /tmp \
     /tmp/.X11-unix
   touch "${LOG_DIR}/xvfb.log" "${LOG_DIR}/openbox.log" "${LOG_DIR}/x11vnc.log" "${LOG_DIR}/websockify.log" "${LOG_DIR}/window-agent.log" "${LOG_DIR}/app.log"
+  touch "${LOG_DIR}/file-bridge.log"
   chmod 1777 /tmp /tmp/.X11-unix
   chmod 0700 "${XDG_RUNTIME_DIR}"
 
@@ -159,6 +160,7 @@ start_log_forwarders() {
   tail_component_log "websockify" "${LOG_DIR}/websockify.log"
   tail_component_log "window_agent" "${LOG_DIR}/window-agent.log"
   tail_component_log "app" "${LOG_DIR}/app.log"
+  tail_component_log "file_bridge" "${LOG_DIR}/file-bridge.log"
 }
 
 wait_for_display() {
@@ -177,8 +179,31 @@ wait_for_display() {
 apply_display_geometry() {
   local width=${1:-${SCREEN_WIDTH}}
   local height=${2:-${SCREEN_HEIGHT}}
+  local mode_name="${width}x${height}"
 
-  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" sh -lc "xrandr --fb ${width}x${height} >/dev/null 2>&1 || xrandr -s ${width}x${height} >/dev/null 2>&1 || true"
+  # For Xvfb we must create proper RandR modes, not just use --fb (which only clips
+  # the framebuffer without telling apps the real resolution has changed).
+  # Dummy mode timings (all zeros) work fine with Xvfb's virtual output.
+  local xrandr_script
+  xrandr_script="$(cat <<XEOF
+# Detect the output name (usually 'screen' for Xvfb)
+OUTPUT=\$(xrandr 2>/dev/null | awk '/ connected/{print \$1; exit}')
+OUTPUT=\${OUTPUT:-screen}
+
+# Create the mode if it doesn't already exist
+if ! xrandr 2>/dev/null | grep -q "${mode_name}"; then
+  xrandr --newmode "${mode_name}" 0 ${width} ${width} ${width} ${width} ${height} ${height} ${height} ${height} 2>/dev/null || true
+  xrandr --addmode "\${OUTPUT}" "${mode_name}" 2>/dev/null || true
+fi
+
+# Switch to the mode
+xrandr --output "\${OUTPUT}" --mode "${mode_name}" 2>/dev/null || \
+  xrandr -s "${mode_name}" 2>/dev/null || \
+  xrandr --fb ${mode_name} 2>/dev/null || true
+XEOF
+  )"
+
+  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" sh -c "${xrandr_script}"
 }
 
 wait_for_port() {
@@ -553,9 +578,6 @@ start_x11vnc() {
     -repeat
     -wait 10
     -defer 10
-    -nocursorshape
-    -nocursorpos
-    -cursor none
   )
 
   if is_enabled "${X11VNC_NOXDAMAGE}"; then
@@ -589,7 +611,13 @@ start_file_bridge() {
 
   # Start the Python file bridge server
   emit_log "info" "file_bridge_start" "Starting file bridge on port ${FILE_BRIDGE_PORT:-9091}"
-  runuser -u "${APP_USER}" -- python3 /app/file-bridge.py &
+  runuser -u "${APP_USER}" -- env \
+    DISPLAY="${DISPLAY}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    FILE_BRIDGE_PORT="${FILE_BRIDGE_PORT}" \
+    FILE_BRIDGE_DIR="${bridge_dir}" \
+    SESSION_HOME="${SESSION_HOME}" \
+    python3 -u /app/file-bridge.py >>"${LOG_DIR}/file-bridge.log" 2>&1 &
   pids+=("$!")
 }
 

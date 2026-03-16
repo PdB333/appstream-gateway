@@ -102,10 +102,56 @@
         #closeAppButton:hover {
             background: rgba(255, 112, 84, 0.98);
         }
+
+        #dropOverlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            background: rgba(59, 130, 246, 0.18);
+            border: 3px dashed rgba(59, 130, 246, 0.7);
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+        }
+
+        #dropOverlay.active {
+            display: flex;
+        }
+
+        #dropOverlay span {
+            padding: 16px 28px;
+            border-radius: 12px;
+            background: rgba(10, 12, 16, 0.82);
+            color: #f5f7fa;
+            font-size: 18px;
+            backdrop-filter: blur(10px);
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 16px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 60;
+            padding: 10px 20px;
+            border-radius: 8px;
+            background: rgba(10, 12, 16, 0.85);
+            color: #f5f7fa;
+            font-size: 13px;
+            backdrop-filter: blur(10px);
+            animation: toast-fade 2.5s ease forwards;
+        }
+
+        @keyframes toast-fade {
+            0%, 70% { opacity: 1; }
+            100% { opacity: 0; }
+        }
     </style>
 </head>
 <body>
     <div id="display"></div>
+    <div id="dropOverlay"><span>Drop files to upload into session</span></div>
     <div id="hud">
         <div class="hud-panel">
             <div id="status">Loading</div>
@@ -146,6 +192,10 @@
 
         function applyLocalCursor(enabled) {
             display.classList.toggle("local-cursor", enabled);
+            if (rfb && rfb._cursor && rfb._cursor._canvas) {
+                // Hide noVNC fallback cursor canvas when local cursor mode is enabled.
+                rfb._cursor._canvas.style.visibility = enabled ? "hidden" : "";
+            }
         }
 
         localCursorInput.checked = localStorage.getItem(localCursorKey) !== "0";
@@ -384,6 +434,7 @@
 
         setStatus("Connecting...");
         rfb = new RFB(display, url, { credentials: { password } });
+        applyLocalCursor(localCursorInput.checked);
 
         rfb.addEventListener("connect", connectedToServer);
         rfb.addEventListener("disconnect", disconnectedFromServer);
@@ -396,7 +447,7 @@
         rfb.resizeSession = false;
         rfb.qualityLevel = readNumberQuery("quality", 9);
         rfb.compressionLevel = readNumberQuery("compression", 1);
-        rfb.showDotCursor = true;
+        rfb.showDotCursor = false;
         rfb.dragViewport = false;
         rfb.focusOnClick = true;
         document.title = readQueryVariable("title", "app-web");
@@ -404,7 +455,10 @@
         focusCanvas();
         window.setInterval(focusCanvas, 250);
 
-        // ── File/URL bridge: poll for xdg-open requests from the remote session ──
+        // ── Session bridge: file/URL forwarding, clipboard sync, file upload ──
+        const dropOverlay = document.getElementById("dropOverlay");
+        let lastClipboardText = "";
+
         function bridgeUrl(endpoint) {
             const base = sessionMatch
                 ? `/sessions/${sessionId}/bridge`
@@ -414,6 +468,15 @@
             return url;
         }
 
+        function showToast(msg) {
+            const el = document.createElement("div");
+            el.className = "toast";
+            el.textContent = msg;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 2600);
+        }
+
+        // ── xdg-open bridge (poll pending items) ──
         async function pollFileBridge() {
             try {
                 const res = await fetch(bridgeUrl("/pending"), { credentials: "same-origin" });
@@ -432,18 +495,123 @@
                         a.click();
                         document.body.removeChild(a);
                     }
-                    // Acknowledge to remove from pending
                     fetch(bridgeUrl(`/ack/${item.id}`), {
                         method: "POST",
                         credentials: "same-origin",
                     }).catch(() => {});
                 }
             } catch {
-                // bridge not yet running or session not ready
+                // bridge not running yet
             }
         }
 
+        // ── Clipboard sync ──
+        // Session → Host: poll remote clipboard for changes
+        async function pollClipboard() {
+            try {
+                const res = await fetch(bridgeUrl("/clipboard"), { credentials: "same-origin" });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.changed && data.text && data.text !== lastClipboardText) {
+                    lastClipboardText = data.text;
+                    try {
+                        await navigator.clipboard.writeText(data.text);
+                    } catch {
+                        // clipboard API requires focus/permission
+                    }
+                }
+            } catch {
+                // bridge not running yet
+            }
+        }
+
+        // Host → Session: intercept paste and copy events
+        async function sendClipboardToSession(text) {
+            if (!text || text === lastClipboardText) return;
+            lastClipboardText = text;
+            try {
+                await fetch(bridgeUrl("/clipboard"), {
+                    method: "POST",
+                    credentials: "same-origin",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ text }),
+                });
+            } catch {
+                // ignore
+            }
+        }
+
+        document.addEventListener("paste", async (e) => {
+            const text = e.clipboardData?.getData("text/plain");
+            if (text) sendClipboardToSession(text);
+        });
+
+        // Also sync when the window regains focus (user may have copied outside)
+        window.addEventListener("focus", async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                if (text) sendClipboardToSession(text);
+            } catch {
+                // clipboard read requires permission
+            }
+        });
+
+        // ── File upload (drag & drop) ──
+        let dragCounter = 0;
+
+        document.addEventListener("dragenter", (e) => {
+            e.preventDefault();
+            dragCounter++;
+            if (e.dataTransfer?.types?.includes("Files")) {
+                dropOverlay.classList.add("active");
+            }
+        });
+
+        document.addEventListener("dragleave", (e) => {
+            e.preventDefault();
+            dragCounter--;
+            if (dragCounter <= 0) {
+                dragCounter = 0;
+                dropOverlay.classList.remove("active");
+            }
+        });
+
+        document.addEventListener("dragover", (e) => {
+            e.preventDefault();
+        });
+
+        document.addEventListener("drop", async (e) => {
+            e.preventDefault();
+            dragCounter = 0;
+            dropOverlay.classList.remove("active");
+
+            const files = e.dataTransfer?.files;
+            if (!files || files.length === 0) return;
+
+            for (const file of files) {
+                try {
+                    const formData = new FormData();
+                    formData.append("file", file, file.name);
+                    const res = await fetch(bridgeUrl("/upload"), {
+                        method: "POST",
+                        credentials: "same-origin",
+                        body: formData,
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        showToast(`Uploaded ${file.name} (${(data.size / 1024).toFixed(0)} KB)`);
+                    } else {
+                        showToast(`Failed to upload ${file.name}`);
+                    }
+                } catch {
+                    showToast(`Failed to upload ${file.name}`);
+                }
+            }
+        });
+
+        // Start polling
         window.setInterval(pollFileBridge, 2000);
+        window.setInterval(pollClipboard, 1500);
     </script>
 </body>
 </html>

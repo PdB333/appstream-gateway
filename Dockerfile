@@ -30,8 +30,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libgbm1 \
   libgconf-2-4 \
   libgdk-pixbuf2.0-0 \
+  libgdk-pixbuf2.0-bin \
   libglib2.0-0 \
   libgtk-3-0 \
+  librsvg2-common \
+  shared-mime-info \
+  adwaita-icon-theme \
   libnotify4 \
   libnss3 \
   libpango-1.0-0 \
@@ -60,8 +64,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   xauth \
   xdg-utils \
   wmctrl \
+  xclip \
   xterm \
   xvfb \
+  && if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1; then gdk-pixbuf-query-loaders --update-cache; fi \
+  && update-mime-database /usr/share/mime \
   && rm -rf /var/lib/apt/lists/*
 
 RUN dbus-uuidgen > /etc/machine-id 2>/dev/null || true \
