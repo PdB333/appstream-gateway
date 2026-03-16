@@ -13,24 +13,27 @@ The stack is:
 
 This keeps each user in a separate desktop session instead of sharing one global VNC desktop.
 
-## What Changed
+## Features
 
-This version adds:
-
-- isolated per-user sessions instead of a single shared desktop process
-- generic application support for AppImages and X11 commands
-- a session manager that creates and deletes containers dynamically
-- HTTP and WebSocket proxying through the manager so VNC is never exposed directly
-- signed session access URLs
-- idle session reaping
-- CPU/RAM limits per session
-- shared AppImage download cache
-- non-root application execution inside the session container
-- catalog-based configuration for curated production apps
-- resumable sessions per client
-- optional persistent home volumes per app or per client
-- structured manager logs, Prometheus metrics and diagnostics endpoints
-- richer application compatibility with AppImages, archives and in-image binaries
+- **Isolated per-user sessions** — each browser tab gets its own container with a virtual desktop
+- **Generic application support** — AppImages, archives (tar/zip), in-image binaries, X11 commands
+- **Dynamic session management** — containers created and destroyed on demand via HTTP API
+- **Signed session URLs** — VNC traffic is never exposed directly; the manager proxies everything
+- **Bidirectional clipboard** — copy/paste between host browser and session container
+- **File upload via drag & drop** — drop files onto the browser to upload into the session
+- **xdg-open bridge** — URLs and files opened inside the session are forwarded to the host browser
+- **Dynamic resize** — session resolution adapts to the browser window size
+- **Local cursor mode** — use your native browser cursor instead of the VNC-rendered one
+- **Fullscreen mode** — immersive full-screen desktop experience (F11)
+- **Collapsible HUD** — toolbar auto-hides, toggle with Ctrl+Shift+H
+- **Idle session reaping** — unused sessions are automatically cleaned up
+- **CPU/RAM limits** — per-session resource controls
+- **Shared download cache** — AppImages are downloaded once and cached across sessions
+- **Resumable sessions** — reconnect to your existing session from the same browser
+- **Persistent home volumes** — per-client or per-app storage modes
+- **Catalog-based configuration** — curated production apps via `config/apps.json`
+- **Structured logging** — JSON logs on stdout, Prometheus metrics on `/metrics`
+- **Kubernetes support** — deploy sessions as Pods instead of Docker containers
 
 ## Architecture
 
@@ -41,45 +44,6 @@ This version adds:
 5. Session traffic is authorized by a signed cookie scoped to that session path.
 6. The manager exposes Prometheus metrics on `/metrics`.
 7. Session diagnostics and container logs are available through the admin API.
-
-## Kubernetes
-
-The repository now ships Kubernetes manifests in [`k8s/`](k8s/).
-Those manifests deploy the manager in `SESSION_BACKEND=kubernetes` mode so it creates session Pods directly through the Kubernetes API instead of using a local Docker socket.
-
-Included resources:
-
-- namespace
-- service accounts
-- RBAC for Pod creation, inspection and log access
-- app catalog `ConfigMap`
-- PVCs for shared cache and persistent homes
-- manager `Deployment`
-- `Service`
-- `Ingress`
-- `NetworkPolicy`
-
-### Apply
-
-1. Build and push the manager and session images somewhere your cluster can pull them from.
-2. Edit [`k8s/deployment.yaml`](k8s/deployment.yaml) and replace the placeholder images and public URL.
-3. Create a real secret from [`k8s/secret.example.yaml`](k8s/secret.example.yaml) and save it as `k8s/secret.yaml`.
-4. Check that your storage class supports `ReadWriteMany` for the PVCs in [`k8s/pvc.yaml`](k8s/pvc.yaml) if you want shared cache and persistent homes.
-5. Apply:
-
-```bash
-kubectl apply -f k8s/secret.yaml
-kubectl apply -k k8s
-```
-
-The manager service is then available through the Ingress in [`k8s/ingress.yaml`](k8s/ingress.yaml).
-
-### Kubernetes Notes
-
-- Session Pods are created in the same namespace as the manager.
-- Session diagnostics use `pods/log` and, when available, `metrics.k8s.io`.
-- If the cluster has no metrics-server installed, logs and runtime state still work but live CPU/memory stats will be empty.
-- Persistent `per-client` and `shared-app` homes rely on the PVC configured through `K8S_SESSION_HOME_CLAIM`.
 
 ## Quick Start
 
@@ -95,127 +59,184 @@ docker compose up --build
 
 6. Open the manager on the host or domain you exposed.
 
-The default catalog contains safe demo apps:
+The default catalog includes demo apps (`xterm`, `xclock`, `xeyes`) and production apps like VSCodium, Firefox, Brave, Obsidian, Joplin, Logseq, and Krita.
 
-- `xterm`
-- `xclock`
-- `xeyes`
+## Included Applications
 
-## Add An AppImage
+| App | Type | Category |
+|-----|------|----------|
+| Terminal (xterm) | command | debug / utility |
+| XClock | command | demo |
+| XEyes | command | demo |
+| VSCodium | AppImage | development / editor |
+| Obsidian | AppImage | productivity / notes |
+| Joplin | AppImage | productivity / notes |
+| Logseq | AppImage | productivity / knowledge |
+| Krita | AppImage | graphics / creative |
+| Firefox | archive (tar) | internet / browser |
+| Brave Browser | archive (zip) | internet / browser |
+| Lens Desktop | AppImage (local) | devops / kubernetes |
 
-Edit `config/apps.json` and add an entry like this:
+## Add An Application
+
+Edit `config/apps.json` and add an entry. Three source types are supported:
+
+### AppImage from URL
 
 ```json
 {
-  "id": "appimage-example",
-  "name": "Example AppImage",
-  "description": "An AppImage delivered as an isolated browser session.",
+  "id": "my-app",
+  "name": "My App",
   "source": {
     "type": "appimage-url",
-    "url": "https://example.invalid/path/to/example.AppImage",
+    "url": "https://example.com/MyApp.AppImage",
     "sha256": ""
   },
   "launch": {
     "args": "--no-sandbox",
     "extractAndRun": true
   },
-  "resources": {
-    "cpuCores": 1,
-    "memoryMb": 2048
-  },
-  "display": {
-    "width": 1440,
-    "height": 900,
-    "depth": 24
-  }
+  "resources": { "cpuCores": 2, "memoryMb": 4096 },
+  "display": { "width": 1440, "height": 900, "depth": 24 }
 }
 ```
 
-Use `sha256` whenever you control the artifact and want supply-chain verification.
+### Archive from URL (tar.bz2, tar.gz, zip)
+
+```json
+{
+  "id": "firefox",
+  "name": "Firefox",
+  "source": {
+    "type": "archive-url",
+    "url": "https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US",
+    "archiveEntrypoint": "firefox/firefox",
+    "archiveFormat": "auto"
+  },
+  "launch": { "args": "--no-remote" },
+  "resources": { "cpuCores": 2, "memoryMb": 4096 },
+  "display": { "width": 1440, "height": 900, "depth": 24 }
+}
+```
+
+### Preinstalled command
+
+```json
+{
+  "id": "xterm",
+  "name": "Terminal",
+  "source": {
+    "type": "command",
+    "command": "xterm -fa 'DejaVu Sans Mono' -fs 11"
+  }
+}
+```
 
 ## Session Catalog Format
 
 Each application entry supports:
 
-- `id`: stable slug
-- `name`: display name
-- `description`: optional description
-- `source.type`: `command`, `appimage-url`, `appimage-file`, `binary-path`, or `archive-url`
-- `source.command`: shell command for preinstalled apps
-- `source.url`: AppImage URL
-- `source.sha256`: optional AppImage checksum
-- `source.path`: path to an AppImage or binary already present in the image
-- `source.archiveEntrypoint`: relative executable path inside an extracted archive
-- `source.archiveFormat`: `auto`, `zip`, or `tar`
-- `launch.args`: raw CLI args appended to the app launch
-- `launch.extractAndRun`: enables `--appimage-extract-and-run`
-- `launch.preLaunchCommand`: command executed before the application starts
-- `launch.workingDirectory`: working directory used for the launched app
-- `launch.healthcheckPath`: HTTP path used by the manager readiness probe
-- `resources.cpuCores`: CPU quota
-- `resources.memoryMb`: memory limit
-- `display.width|height|depth`: virtual screen size
-- `storage.mode`: `ephemeral`, `per-client`, or `shared-app`
-- `session.resume`: allows the manager to reopen an existing session for the same client/app
-- `env`: extra environment variables injected into the session
+| Field | Description |
+|-------|-------------|
+| `id` | Stable slug used in URLs and storage |
+| `name` | Display name |
+| `description` | Optional description shown in the dashboard |
+| `featured` | Show prominently in the dashboard |
+| `categories` | Array of category tags for filtering |
+| `tags` | Array of search tags |
+| `source.type` | `command`, `appimage-url`, `appimage-file`, `binary-path`, or `archive-url` |
+| `source.command` | Shell command (for `command` type) |
+| `source.url` | Download URL (for `appimage-url` and `archive-url`) |
+| `source.sha256` | Optional checksum for supply-chain verification |
+| `source.path` | Filesystem path (for `appimage-file` and `binary-path`) |
+| `source.archiveEntrypoint` | Relative path to the executable inside the archive |
+| `source.archiveFormat` | `auto`, `zip`, or `tar` |
+| `source.archiveStripComponents` | Number of leading path components to strip |
+| `launch.args` | CLI args appended to the app command |
+| `launch.extractAndRun` | Pre-extract AppImage for better GTK compatibility |
+| `launch.preLaunchCommand` | Command executed before the app starts |
+| `launch.workingDirectory` | Working directory for the app |
+| `launch.healthcheckPath` | HTTP path for the manager readiness probe |
+| `resources.cpuCores` | CPU quota |
+| `resources.memoryMb` | Memory limit in MB |
+| `display.width` | Virtual screen width |
+| `display.height` | Virtual screen height |
+| `display.depth` | Color depth (16, 24, or 32) |
+| `storage.mode` | `ephemeral`, `per-client`, or `shared-app` |
+| `session.resume` | Allow reconnecting to existing sessions |
+| `env` | Extra environment variables for the session |
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+Shift+H` | Toggle HUD toolbar visibility |
+| `F11` | Toggle fullscreen mode |
+
+## Session Bridge
+
+The session container runs a lightweight HTTP bridge server for host↔session integration:
+
+- **Clipboard sync** — bidirectional clipboard between browser and session
+- **File upload** — drag & drop files onto the browser to upload them into `/data/home`
+- **xdg-open bridge** — URLs opened inside the session (e.g. clicking links in VSCodium) are forwarded to your host browser
+- **File download** — files passed to `xdg-open` inside the session are downloaded to your host
+
+## Kubernetes
+
+The repository ships Kubernetes manifests in [`k8s/`](k8s/).
+Those manifests deploy the manager in `SESSION_BACKEND=kubernetes` mode so it creates session Pods directly through the Kubernetes API instead of using a local Docker socket.
+
+Included resources: namespace, service accounts, RBAC, app catalog ConfigMap, PVCs, manager Deployment, Service, Ingress, NetworkPolicy.
+
+### Apply
+
+1. Build and push the manager and session images somewhere your cluster can pull them from.
+2. Edit [`k8s/deployment.yaml`](k8s/deployment.yaml) and replace the placeholder images and public URL.
+3. Create a real secret from [`k8s/secret.example.yaml`](k8s/secret.example.yaml).
+4. Check that your storage class supports `ReadWriteMany` for the PVCs.
+5. Apply:
+
+```bash
+kubectl apply -f k8s/secret.yaml
+kubectl apply -k k8s
+```
 
 ## Observability
 
-The manager now exposes:
-
-- structured JSON logs on stdout
-- Prometheus metrics on `/metrics`
-- `GET /api/overview` for dashboard metrics and recent manager events
-- `GET /api/sessions/<id>/diagnostics` for runtime state, recent session events and container logs
-
-Diagnostics include:
-
-- launch duration
-- readiness probe count
-- runtime inspect state
-- recent container logs
-- last known CPU and memory usage when available
-
-## User Experience
-
-The dashboard now includes:
-
-- a persistent `clientId` stored in the browser
-- automatic session resume for compatible apps
-- favorites stored locally
-- app search/filter by name, tags and categories
-- richer custom launch form for multiple source types
-- in-dashboard diagnostics and runtime log viewing
-
-For persistent settings, use `storage.mode: per-client` on apps that should keep their home directory between sessions.
+- **Structured JSON logs** on stdout (manager and session containers)
+- **Prometheus metrics** on `/metrics` (session count, launch duration, etc.)
+- **Dashboard overview** via `GET /api/overview`
+- **Session diagnostics** via `GET /api/sessions/<id>/diagnostics` (runtime state, logs, CPU/memory)
 
 ## Production Notes
 
-This repository is designed for production-oriented deployments, but production still means operating discipline:
-
-- put the manager behind HTTPS
-- set `SECURE_COOKIES=true`
-- set a strong `SESSION_SECRET`
-- set `ADMIN_API_TOKEN`
-- keep `ALLOW_CUSTOM_APPS=false` unless you explicitly trust the admins using it
-- curate `config/apps.json` instead of letting users supply arbitrary binaries
-- restrict the Docker socket to the manager only
-- monitor and prune stale session containers and cache volumes
-- scrape `/metrics` from Prometheus or your monitoring stack
-- centralize manager JSON logs in your log pipeline
+- Put the manager behind HTTPS and set `SECURE_COOKIES=true`
+- Set a strong `SESSION_SECRET` and `ADMIN_API_TOKEN`
+- Keep `ALLOW_CUSTOM_APPS=false` unless you trust the admins
+- Curate `config/apps.json` — don't let users supply arbitrary binaries
+- Restrict the Docker socket to the manager only
+- Monitor and prune stale session containers and cache volumes
+- Scrape `/metrics` from Prometheus
 
 ## Limits
 
 This approach works well for many X11/Electron/AppImage applications, but it is still remote desktop delivery:
 
-- latency-sensitive GPU apps will be a poor fit
-- audio, USB, webcam, DRM, and advanced window manager integrations may need extra work
-- every session consumes RAM and CPU, so sizing matters
+- Latency-sensitive GPU apps will be a poor fit
+- Audio, USB, webcam, DRM, and advanced window manager integrations may need extra work
+- Every session consumes RAM and CPU, so sizing matters
 
 ## Files
 
-- `Dockerfile`: generic session image
-- `app/entrypoint.sh`: session bootstrap for GUI apps
-- `app/public/index.html`: noVNC entry page
-- `manager/`: session manager and proxy
-- `config/apps.json`: curated application catalog
+| Path | Description |
+|------|-------------|
+| `Dockerfile` | Generic session image |
+| `app/entrypoint.sh` | Session bootstrap (Xvfb, x11vnc, websockify, app launch) |
+| `app/public/index.html` | noVNC client with HUD, clipboard, file upload |
+| `app/file-bridge.py` | Session bridge server (clipboard, upload, xdg-open) |
+| `app/xdg-open-bridge.sh` | xdg-open override that forwards to the bridge |
+| `manager/` | Session manager, proxy, and API server |
+| `config/apps.json` | Curated application catalog |
+| `k8s/` | Kubernetes manifests |
+| `docker-compose.yml` | Local development stack |

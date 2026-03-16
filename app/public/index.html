@@ -6,8 +6,17 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>app-web</title>
     <style>
-        html,
-        body {
+        :root {
+            --hud-bg: rgba(10, 12, 16, 0.78);
+            --hud-fg: #f5f7fa;
+            --hud-muted: #9ca3af;
+            --hud-accent: rgba(59, 130, 246, 0.82);
+            --hud-danger: rgba(255, 99, 71, 0.92);
+            --hud-radius: 10px;
+            --hud-blur: blur(12px);
+        }
+
+        html, body {
             margin: 0;
             width: 100%;
             height: 100%;
@@ -19,7 +28,8 @@
         body {
             position: fixed;
             inset: 0;
-            font-family: "Segoe UI", sans-serif;
+            font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+            font-size: 13px;
         }
 
         #display {
@@ -42,132 +52,224 @@
             background: #050505;
         }
 
-        /* Local cursor ON: use browser cursor, hide VNC-rendered cursor */
-        #display.local-cursor canvas {
-            cursor: default !important;
-        }
+        #display.local-cursor canvas { cursor: default !important; }
+        #display.remote-cursor canvas { cursor: none !important; }
 
-        /* Local cursor OFF: let noVNC render VNC cursor, hide browser cursor */
-        #display.remote-cursor canvas {
-            cursor: none !important;
-        }
-
+        /* ── HUD container ── */
         #hud {
             position: fixed;
-            top: 12px;
-            right: 12px;
+            top: 0;
+            right: 0;
             z-index: 20;
-            display: grid;
-            gap: 8px;
-            justify-items: end;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 6px;
+            transition: opacity 0.3s ease, transform 0.3s ease;
         }
 
-        .hud-panel {
-            display: inline-flex;
+        #hud.hud-hidden {
+            opacity: 0;
+            transform: translateY(-8px);
+            pointer-events: none;
+        }
+
+        /* Small floating toggle to show/hide HUD */
+        #hudToggle {
+            position: fixed;
+            top: 6px;
+            right: 6px;
+            z-index: 25;
+            width: 32px;
+            height: 32px;
+            border: none;
+            border-radius: 8px;
+            background: var(--hud-bg);
+            color: var(--hud-fg);
+            font-size: 16px;
+            cursor: pointer;
+            backdrop-filter: var(--hud-blur);
+            display: flex;
             align-items: center;
+            justify-content: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        #hudToggle:hover { opacity: 1 !important; }
+        #hudToggle.show-toggle { opacity: 0.4; }
+
+        .hud-panel {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
+            border-radius: var(--hud-radius);
+            background: var(--hud-bg);
+            color: var(--hud-fg);
+            backdrop-filter: var(--hud-blur);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+            flex-wrap: wrap;
+        }
+
+        /* Status bar */
+        #statusPanel {
             gap: 10px;
-            padding: 8px 12px;
-            border-radius: 999px;
-            background: rgba(10, 12, 16, 0.74);
-            color: #f5f7fa;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 10px 26px rgba(0, 0, 0, 0.28);
+        }
+
+        #statusDot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #4ade80;
+            flex-shrink: 0;
+            transition: background 0.3s;
+        }
+
+        #statusDot.connecting { background: #facc15; animation: pulse 1s infinite; }
+        #statusDot.disconnected { background: #f87171; }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
         }
 
         #status {
             white-space: nowrap;
+            font-size: 12px;
             transition: opacity 180ms ease;
         }
 
-        #status.is-hidden {
-            opacity: 0;
+        #status.is-hidden { opacity: 0.4; }
+
+        /* Controls panel */
+        #controlsPanel {
+            flex-wrap: wrap;
+            gap: 6px;
         }
 
         .toggle {
             display: inline-flex;
             align-items: center;
-            gap: 6px;
+            gap: 5px;
             white-space: nowrap;
             font-size: 12px;
-            color: #d9dde3;
-        }
-
-        .toggle input {
-            margin: 0;
-        }
-
-        #closeAppButton {
-            border: none;
-            border-radius: 999px;
-            padding: 8px 12px;
-            background: rgba(255, 99, 71, 0.92);
-            color: white;
+            color: var(--hud-muted);
             cursor: pointer;
+            user-select: none;
+            transition: color 0.2s;
         }
 
-        #closeAppButton:hover {
-            background: rgba(255, 112, 84, 0.98);
+        .toggle:hover { color: var(--hud-fg); }
+        .toggle input { margin: 0; accent-color: var(--hud-accent); }
+
+        .hud-btn {
+            border: none;
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 12px;
+            cursor: pointer;
+            transition: filter 0.15s;
+            white-space: nowrap;
         }
 
+        .hud-btn:hover { filter: brightness(1.15); }
+
+        .btn-accent {
+            background: var(--hud-accent);
+            color: white;
+        }
+
+        .btn-danger {
+            background: var(--hud-danger);
+            color: white;
+        }
+
+        .hud-sep {
+            width: 1px;
+            height: 16px;
+            background: rgba(255,255,255,0.12);
+            flex-shrink: 0;
+        }
+
+        /* ── Drop overlay ── */
         #dropOverlay {
             display: none;
             position: fixed;
             inset: 0;
             z-index: 50;
-            background: rgba(59, 130, 246, 0.18);
-            border: 3px dashed rgba(59, 130, 246, 0.7);
+            background: rgba(59, 130, 246, 0.14);
+            border: 3px dashed rgba(59, 130, 246, 0.6);
             align-items: center;
             justify-content: center;
             pointer-events: none;
         }
 
-        #dropOverlay.active {
-            display: flex;
-        }
+        #dropOverlay.active { display: flex; }
 
         #dropOverlay span {
             padding: 16px 28px;
             border-radius: 12px;
-            background: rgba(10, 12, 16, 0.82);
-            color: #f5f7fa;
-            font-size: 18px;
-            backdrop-filter: blur(10px);
+            background: var(--hud-bg);
+            color: var(--hud-fg);
+            font-size: 16px;
+            backdrop-filter: var(--hud-blur);
         }
 
+        /* ── Toast notifications ── */
         .toast {
             position: fixed;
-            bottom: 16px;
+            bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
             z-index: 60;
             padding: 10px 20px;
             border-radius: 8px;
-            background: rgba(10, 12, 16, 0.85);
-            color: #f5f7fa;
+            background: var(--hud-bg);
+            color: var(--hud-fg);
             font-size: 13px;
-            backdrop-filter: blur(10px);
-            animation: toast-fade 2.5s ease forwards;
+            backdrop-filter: var(--hud-blur);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            animation: toast-fade 2.8s ease forwards;
         }
 
         @keyframes toast-fade {
-            0%, 70% { opacity: 1; }
-            100% { opacity: 0; }
+            0%, 65% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            100% { opacity: 0; transform: translateX(-50%) translateY(8px); }
+        }
+
+        /* ── Keyboard shortcut hint ── */
+        .shortcut-hint {
+            font-size: 10px;
+            color: var(--hud-muted);
+            opacity: 0.7;
         }
     </style>
 </head>
 <body>
     <div id="display"></div>
     <div id="dropOverlay"><span>Drop files to upload into session</span></div>
+
+    <!-- Floating toggle button (visible when HUD is hidden) -->
+    <button id="hudToggle" title="Toggle toolbar (Ctrl+Shift+H)">&#9776;</button>
+
+    <!-- HUD toolbar -->
     <div id="hud">
-        <div class="hud-panel">
-            <div id="status">Loading</div>
+        <div class="hud-panel" id="statusPanel">
+            <div id="statusDot" class="connecting"></div>
+            <div id="status">Connecting...</div>
         </div>
-        <div class="hud-panel">
+        <div class="hud-panel" id="controlsPanel">
             <label class="toggle"><input id="localCursor" type="checkbox">Local cursor</label>
-            <label class="toggle"><input id="closeOnUnload" type="checkbox">Close app with tab</label>
+            <div class="hud-sep"></div>
+            <label class="toggle"><input id="closeOnUnload" type="checkbox">Close with tab</label>
             <label class="toggle"><input id="confirmOnClose" type="checkbox">Warn on close</label>
-            <button id="fullscreenButton" type="button" style="border:none;border-radius:999px;padding:8px 12px;background:rgba(59,130,246,0.82);color:white;cursor:pointer;font-size:12px;">⛶ Fullscreen</button>
-            <button id="closeAppButton" type="button">Close app</button>
+            <div class="hud-sep"></div>
+            <button id="fullscreenButton" class="hud-btn btn-accent" type="button">Fullscreen</button>
+            <button id="closeAppButton" class="hud-btn btn-danger" type="button">Close app</button>
+            <span class="shortcut-hint">Ctrl+Shift+H to hide</span>
         </div>
     </div>
 
@@ -186,6 +288,9 @@
 
         const display = document.getElementById("display");
         const statusElement = document.getElementById("status");
+        const statusDot = document.getElementById("statusDot");
+        const hud = document.getElementById("hud");
+        const hudToggle = document.getElementById("hudToggle");
         const localCursorInput = document.getElementById("localCursor");
         const closeOnUnloadInput = document.getElementById("closeOnUnload");
         const confirmOnCloseInput = document.getElementById("confirmOnClose");
@@ -194,198 +299,177 @@
         const sessionMatch = window.location.pathname.match(/^\/sessions\/([a-z0-9]+)/);
         const sessionId = sessionMatch ? sessionMatch[1] : "";
         const sessionToken = new URL(window.location.href).searchParams.get("token") || "";
-        const localCursorKey = "appWeb.localCursor";
-        const closeOnUnloadKey = "appWeb.closeOnUnload";
-        const confirmOnCloseKey = "appWeb.confirmOnClose";
 
+        // ── Storage keys ──
+        const keys = {
+            localCursor: "appWeb.localCursor",
+            closeOnUnload: "appWeb.closeOnUnload",
+            confirmOnClose: "appWeb.confirmOnClose",
+            hudVisible: "appWeb.hudVisible",
+        };
+
+        // ── HUD visibility ──
+        let hudVisible = localStorage.getItem(keys.hudVisible) !== "0";
+
+        function setHudVisible(visible) {
+            hudVisible = visible;
+            localStorage.setItem(keys.hudVisible, visible ? "1" : "0");
+            hud.classList.toggle("hud-hidden", !visible);
+            hudToggle.classList.toggle("show-toggle", !visible);
+        }
+
+        setHudVisible(hudVisible);
+
+        hudToggle.addEventListener("click", () => setHudVisible(!hudVisible));
+
+        // Auto-hide HUD after 4s of inactivity (only when connected)
+        let hudAutoHideTimer = 0;
+        function resetHudAutoHide() {
+            if (hudAutoHideTimer) clearTimeout(hudAutoHideTimer);
+            if (!hudVisible) return;
+            hudAutoHideTimer = setTimeout(() => {
+                if (hudVisible && statusDot.classList.contains("connecting") === false) {
+                    // Don't auto-hide while connecting
+                }
+            }, 8000);
+        }
+
+        // ── Cursor mode ──
         function applyLocalCursor(enabled) {
             display.classList.toggle("local-cursor", enabled);
             display.classList.toggle("remote-cursor", !enabled);
             if (rfb) {
-                // When local cursor is ON: hide VNC cursor entirely
-                // When local cursor is OFF: show VNC cursor, hide browser cursor
                 rfb.showDotCursor = false;
                 try {
-                    // Hide the noVNC software cursor canvas when using local cursor
                     if (rfb._cursor && rfb._cursor._canvas) {
                         rfb._cursor._canvas.style.visibility = enabled ? "hidden" : "";
                     }
-                } catch { /* noVNC internals may vary */ }
+                } catch { }
             }
         }
 
-        localCursorInput.checked = localStorage.getItem(localCursorKey) !== "0";
+        // ── Init toggle states from localStorage ──
+        localCursorInput.checked = localStorage.getItem(keys.localCursor) !== "0";
         applyLocalCursor(localCursorInput.checked);
-        closeOnUnloadInput.checked = localStorage.getItem(closeOnUnloadKey) !== "0";
-        confirmOnCloseInput.checked = localStorage.getItem(confirmOnCloseKey) !== "0";
+        closeOnUnloadInput.checked = localStorage.getItem(keys.closeOnUnload) !== "0";
+        confirmOnCloseInput.checked = localStorage.getItem(keys.confirmOnClose) !== "0";
 
         localCursorInput.addEventListener("change", () => {
-            localStorage.setItem(localCursorKey, localCursorInput.checked ? "1" : "0");
+            localStorage.setItem(keys.localCursor, localCursorInput.checked ? "1" : "0");
             applyLocalCursor(localCursorInput.checked);
         });
 
         closeOnUnloadInput.addEventListener("change", () => {
-            localStorage.setItem(closeOnUnloadKey, closeOnUnloadInput.checked ? "1" : "0");
+            localStorage.setItem(keys.closeOnUnload, closeOnUnloadInput.checked ? "1" : "0");
         });
 
         confirmOnCloseInput.addEventListener("change", () => {
-            localStorage.setItem(confirmOnCloseKey, confirmOnCloseInput.checked ? "1" : "0");
+            localStorage.setItem(keys.confirmOnClose, confirmOnCloseInput.checked ? "1" : "0");
         });
 
-        function setStatus(text, autoHide = false) {
+        // ── Status ──
+        function setStatus(text, state = "connected", autoHide = false) {
             statusElement.textContent = text;
             statusElement.classList.remove("is-hidden");
-            if (reconnectTimer) {
-                clearTimeout(reconnectTimer);
-                reconnectTimer = 0;
-            }
+            statusDot.className = state === "connected" ? "" : state;
+            if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = 0; }
             if (autoHide) {
-                reconnectTimer = window.setTimeout(() => {
-                    statusElement.classList.add("is-hidden");
-                }, 1400);
+                reconnectTimer = setTimeout(() => statusElement.classList.add("is-hidden"), 1800);
             }
         }
 
+        // ── Query helpers ──
         function readQueryVariable(name, defaultValue) {
             const re = new RegExp('.*[?&]' + name + '=([^&#]*)');
             const match = document.location.href.match(re);
-            if (match) {
-                return decodeURIComponent(match[1]);
-            }
-            return defaultValue;
+            return match ? decodeURIComponent(match[1]) : defaultValue;
         }
 
         function readBooleanQuery(name, defaultValue) {
-            const fallback = defaultValue ? "1" : "0";
-            const value = String(readQueryVariable(name, fallback)).trim().toLowerCase();
-            return !["0", "false", "no", "off", ""].includes(value);
+            const v = String(readQueryVariable(name, defaultValue ? "1" : "0")).trim().toLowerCase();
+            return !["0", "false", "no", "off", ""].includes(v);
         }
 
         function readNumberQuery(name, defaultValue) {
-            const parsed = Number.parseInt(readQueryVariable(name, String(defaultValue)), 10);
-            return Number.isFinite(parsed) ? parsed : defaultValue;
+            const p = Number.parseInt(readQueryVariable(name, String(defaultValue)), 10);
+            return Number.isFinite(p) ? p : defaultValue;
         }
 
         function defaultWebsockifyPath() {
-            const pathname = window.location.pathname.replace(/\/+$/, "");
-            if (pathname === "") {
-                return "websockify";
-            }
-            return pathname.replace(/^\//, "") + "/websockify";
+            const p = window.location.pathname.replace(/\/+$/, "");
+            return p === "" ? "websockify" : p.replace(/^\//, "") + "/websockify";
         }
 
         function sessionControlUrl(action, params = {}) {
             const url = new URL(`/api/session-control/${sessionId}/${action}`, window.location.origin);
-            if (sessionToken) {
-                url.searchParams.set("token", sessionToken);
-            }
-            for (const [key, value] of Object.entries(params)) {
-                if (value !== undefined && value !== null && value !== "") {
-                    url.searchParams.set(key, String(value));
-                }
+            if (sessionToken) url.searchParams.set("token", sessionToken);
+            for (const [k, v] of Object.entries(params)) {
+                if (v !== undefined && v !== null && v !== "") url.searchParams.set(k, String(v));
             }
             return url;
         }
 
         function focusCanvas() {
-            const canvas = document.querySelector("#display canvas");
-            if (canvas) {
-                canvas.tabIndex = 0;
-                canvas.focus({ preventScroll: true });
-            }
+            const c = document.querySelector("#display canvas");
+            if (c) { c.tabIndex = 0; c.focus({ preventScroll: true }); }
         }
 
         function reconnectSoon() {
             suppressCloseOnUnload = true;
-            window.setTimeout(() => {
-                window.location.reload();
-            }, readNumberQuery("reconnect_delay", 1000));
+            setTimeout(() => window.location.reload(), readNumberQuery("reconnect_delay", 1000));
         }
 
         async function closeSession(reason, keepalive = false) {
-            if (!sessionId || sessionClosing) {
-                return;
-            }
+            if (!sessionId || sessionClosing) return;
             sessionClosing = true;
             try {
-                await fetch(sessionControlUrl("close", { reason }), {
-                    method: "POST",
-                    keepalive,
-                    credentials: "same-origin",
-                });
-            } catch {
-                // best effort on unload
-            }
+                await fetch(sessionControlUrl("close", { reason }), { method: "POST", keepalive, credentials: "same-origin" });
+            } catch { }
         }
 
+        // ── Resize ──
         async function sendResize(width, height) {
-            if (!sessionId) {
-                return;
-            }
+            if (!sessionId) return;
             const key = `${width}x${height}`;
-            if (key === lastResizeSent) {
-                return;
-            }
-            await fetch(sessionControlUrl("resize", { width, height }), {
-                method: "POST",
-                credentials: "same-origin",
-            });
+            if (key === lastResizeSent) return;
+            await fetch(sessionControlUrl("resize", { width, height }), { method: "POST", credentials: "same-origin" });
             lastResizeSent = key;
         }
 
         function flushPendingResize() {
-            if (!pendingResize) {
-                return;
-            }
+            if (!pendingResize) return;
             const next = pendingResize;
             pendingResize = null;
             queueSessionResize(next.width, next.height, true);
         }
 
         function queueSessionResize(width = Math.round(window.innerWidth), height = Math.round(window.innerHeight), immediate = false) {
-            const nextWidth = Math.max(640, width);
-            const nextHeight = Math.max(360, height);
-
-            if (resizeTimer) {
-                clearTimeout(resizeTimer);
-                resizeTimer = 0;
-            }
+            const w = Math.max(640, width);
+            const h = Math.max(360, height);
+            if (resizeTimer) { clearTimeout(resizeTimer); resizeTimer = 0; }
 
             const runner = async () => {
-                if (resizeInFlight) {
-                    pendingResize = { width: nextWidth, height: nextHeight };
-                    return;
-                }
+                if (resizeInFlight) { pendingResize = { width: w, height: h }; return; }
                 resizeInFlight = true;
-                try {
-                    await sendResize(nextWidth, nextHeight);
-                } catch {
-                    // ignore transient resize failures while the session is starting
-                } finally {
-                    resizeInFlight = false;
-                    flushPendingResize();
-                }
+                try { await sendResize(w, h); } catch { } finally { resizeInFlight = false; flushPendingResize(); }
             };
 
-            if (immediate) {
-                runner();
-                return;
-            }
-
-            resizeTimer = window.setTimeout(runner, 140);
+            if (immediate) { runner(); return; }
+            resizeTimer = setTimeout(runner, 140);
         }
 
+        // ── Connection events ──
         function connectedToServer() {
-            const label = desktopName ? `Connected to ${desktopName}` : "Connected";
-            setStatus(label, true);
+            const label = desktopName ? `Connected — ${desktopName}` : "Connected";
+            setStatus(label, "connected", true);
             focusCanvas();
             queueSessionResize(undefined, undefined, true);
-            window.setTimeout(() => queueSessionResize(), 300);
-            window.setTimeout(() => queueSessionResize(), 1000);
+            setTimeout(() => queueSessionResize(), 300);
+            setTimeout(() => queueSessionResize(), 1000);
         }
 
         function disconnectedFromServer() {
-            setStatus("Connection lost. Reconnecting...");
+            setStatus("Connection lost. Reconnecting...", "disconnected");
             reconnectSoon();
         }
 
@@ -399,7 +483,7 @@
             document.title = desktopName || readQueryVariable("title", "app-web");
         }
 
-        // ── Fullscreen toggle ──
+        // ── Fullscreen ──
         fullscreenButton.addEventListener("click", () => {
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen().catch(() => {});
@@ -409,74 +493,59 @@
         });
 
         document.addEventListener("fullscreenchange", () => {
-            fullscreenButton.textContent = document.fullscreenElement ? "⛶ Exit Fullscreen" : "⛶ Fullscreen";
-            // Trigger resize after fullscreen change
-            window.setTimeout(() => queueSessionResize(undefined, undefined, true), 200);
+            fullscreenButton.textContent = document.fullscreenElement ? "Exit Fullscreen" : "Fullscreen";
+            setTimeout(() => queueSessionResize(undefined, undefined, true), 200);
         });
 
-        // ── Keyboard shortcuts (Ctrl+Shift+H = toggle HUD, F11 = fullscreen) ──
+        // ── Keyboard shortcuts ──
         document.addEventListener("keydown", (e) => {
+            // Ctrl+Shift+H = toggle HUD
             if (e.ctrlKey && e.shiftKey && e.key === "H") {
                 e.preventDefault();
-                const hud = document.getElementById("hud");
-                hud.style.display = hud.style.display === "none" ? "" : "none";
+                setHudVisible(!hudVisible);
             }
+            // F11 = fullscreen
             if (e.key === "F11") {
                 e.preventDefault();
                 fullscreenButton.click();
             }
         });
 
+        // ── Close app ──
         closeAppButton.addEventListener("click", async () => {
             suppressCloseOnUnload = true;
-            setStatus("Closing app...");
+            setStatus("Closing app...", "connecting");
             await closeSession("manual_close");
             window.location.replace("/");
         });
 
-        window.addEventListener("resize", () => {
-            focusCanvas();
-            queueSessionResize();
-        }, { passive: true });
-
-        window.addEventListener("orientationchange", () => {
-            queueSessionResize();
-        });
+        // ── Window events ──
+        window.addEventListener("resize", () => { focusCanvas(); queueSessionResize(); }, { passive: true });
+        window.addEventListener("orientationchange", () => queueSessionResize());
 
         window.addEventListener("beforeunload", (event) => {
-            if (suppressCloseOnUnload) {
-                return;
-            }
-            if (confirmOnCloseInput.checked) {
-                event.preventDefault();
-                event.returnValue = "";
-            }
+            if (suppressCloseOnUnload) return;
+            if (confirmOnCloseInput.checked) { event.preventDefault(); event.returnValue = ""; }
         });
 
         window.addEventListener("pagehide", () => {
-            if (suppressCloseOnUnload || !closeOnUnloadInput.checked) {
-                return;
-            }
+            if (suppressCloseOnUnload || !closeOnUnloadInput.checked) return;
             closeSession("tab_close", true);
         });
 
-        window.addEventListener("error", () => {
-            reconnectSoon();
-        }, true);
+        window.addEventListener("error", () => reconnectSoon(), true);
 
+        // ── Connect to VNC ──
         const host = readQueryVariable("host", window.location.hostname);
         const port = readQueryVariable("port", window.location.port);
         const password = readQueryVariable("password");
         const path = readQueryVariable("path", defaultWebsockifyPath());
 
-        let url = window.location.protocol === "https:" ? "wss" : "ws";
-        url += "://" + host;
-        if (port) {
-            url += ":" + port;
-        }
+        let url = (window.location.protocol === "https:" ? "wss" : "ws") + "://" + host;
+        if (port) url += ":" + port;
         url += "/" + path;
 
-        setStatus("Connecting...");
+        setStatus("Connecting...", "connecting");
         rfb = new RFB(display, url, { credentials: { password } });
         applyLocalCursor(localCursorInput.checked);
 
@@ -497,19 +566,17 @@
         document.title = readQueryVariable("title", "app-web");
 
         focusCanvas();
-        window.setInterval(focusCanvas, 250);
+        setInterval(focusCanvas, 250);
 
         // ── Session bridge: file/URL forwarding, clipboard sync, file upload ──
         const dropOverlay = document.getElementById("dropOverlay");
         let lastClipboardText = "";
 
         function bridgeUrl(endpoint) {
-            const base = sessionMatch
-                ? `/sessions/${sessionId}/bridge`
-                : "/bridge";
-            const url = new URL(`${base}${endpoint}`, window.location.origin);
-            if (sessionToken) url.searchParams.set("token", sessionToken);
-            return url;
+            const base = sessionMatch ? `/sessions/${sessionId}/bridge` : "/bridge";
+            const u = new URL(`${base}${endpoint}`, window.location.origin);
+            if (sessionToken) u.searchParams.set("token", sessionToken);
+            return u;
         }
 
         function showToast(msg) {
@@ -517,7 +584,7 @@
             el.className = "toast";
             el.textContent = msg;
             document.body.appendChild(el);
-            setTimeout(() => el.remove(), 2600);
+            setTimeout(() => el.remove(), 3000);
         }
 
         // ── xdg-open bridge (poll pending items) ──
@@ -530,27 +597,20 @@
                     if (item.type === "url") {
                         window.open(item.url, "_blank", "noopener");
                     } else if (item.type === "file") {
-                        const fileUrl = bridgeUrl(`/file/${item.id}`);
                         const a = document.createElement("a");
-                        a.href = fileUrl.toString();
+                        a.href = bridgeUrl(`/file/${item.id}`).toString();
                         a.download = item.name || "download";
                         a.style.display = "none";
                         document.body.appendChild(a);
                         a.click();
                         document.body.removeChild(a);
                     }
-                    fetch(bridgeUrl(`/ack/${item.id}`), {
-                        method: "POST",
-                        credentials: "same-origin",
-                    }).catch(() => {});
+                    fetch(bridgeUrl(`/ack/${item.id}`), { method: "POST", credentials: "same-origin" }).catch(() => {});
                 }
-            } catch {
-                // bridge not running yet
-            }
+            } catch { }
         }
 
         // ── Clipboard sync ──
-        // Session → Host: poll remote clipboard for changes
         async function pollClipboard() {
             try {
                 const res = await fetch(bridgeUrl("/clipboard"), { credentials: "same-origin" });
@@ -558,46 +618,33 @@
                 const data = await res.json();
                 if (data.changed && data.text && data.text !== lastClipboardText) {
                     lastClipboardText = data.text;
-                    try {
-                        await navigator.clipboard.writeText(data.text);
-                    } catch {
-                        // clipboard API requires focus/permission
-                    }
+                    try { await navigator.clipboard.writeText(data.text); } catch { }
                 }
-            } catch {
-                // bridge not running yet
-            }
+            } catch { }
         }
 
-        // Host → Session: intercept paste and copy events
         async function sendClipboardToSession(text) {
             if (!text || text === lastClipboardText) return;
             lastClipboardText = text;
             try {
                 await fetch(bridgeUrl("/clipboard"), {
-                    method: "POST",
-                    credentials: "same-origin",
+                    method: "POST", credentials: "same-origin",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ text }),
                 });
-            } catch {
-                // ignore
-            }
+            } catch { }
         }
 
-        document.addEventListener("paste", async (e) => {
+        document.addEventListener("paste", (e) => {
             const text = e.clipboardData?.getData("text/plain");
             if (text) sendClipboardToSession(text);
         });
 
-        // Also sync when the window regains focus (user may have copied outside)
         window.addEventListener("focus", async () => {
             try {
                 const text = await navigator.clipboard.readText();
                 if (text) sendClipboardToSession(text);
-            } catch {
-                // clipboard read requires permission
-            }
+            } catch { }
         });
 
         // ── File upload (drag & drop) ──
@@ -606,56 +653,40 @@
         document.addEventListener("dragenter", (e) => {
             e.preventDefault();
             dragCounter++;
-            if (e.dataTransfer?.types?.includes("Files")) {
-                dropOverlay.classList.add("active");
-            }
+            if (e.dataTransfer?.types?.includes("Files")) dropOverlay.classList.add("active");
         });
 
         document.addEventListener("dragleave", (e) => {
             e.preventDefault();
-            dragCounter--;
-            if (dragCounter <= 0) {
-                dragCounter = 0;
-                dropOverlay.classList.remove("active");
-            }
+            if (--dragCounter <= 0) { dragCounter = 0; dropOverlay.classList.remove("active"); }
         });
 
-        document.addEventListener("dragover", (e) => {
-            e.preventDefault();
-        });
+        document.addEventListener("dragover", (e) => e.preventDefault());
 
         document.addEventListener("drop", async (e) => {
             e.preventDefault();
             dragCounter = 0;
             dropOverlay.classList.remove("active");
-
             const files = e.dataTransfer?.files;
             if (!files || files.length === 0) return;
-
             for (const file of files) {
                 try {
-                    const formData = new FormData();
-                    formData.append("file", file, file.name);
-                    const res = await fetch(bridgeUrl("/upload"), {
-                        method: "POST",
-                        credentials: "same-origin",
-                        body: formData,
-                    });
+                    const fd = new FormData();
+                    fd.append("file", file, file.name);
+                    const res = await fetch(bridgeUrl("/upload"), { method: "POST", credentials: "same-origin", body: fd });
                     if (res.ok) {
                         const data = await res.json();
                         showToast(`Uploaded ${file.name} (${(data.size / 1024).toFixed(0)} KB)`);
                     } else {
                         showToast(`Failed to upload ${file.name}`);
                     }
-                } catch {
-                    showToast(`Failed to upload ${file.name}`);
-                }
+                } catch { showToast(`Failed to upload ${file.name}`); }
             }
         });
 
         // Start polling
-        window.setInterval(pollFileBridge, 2000);
-        window.setInterval(pollClipboard, 1500);
+        setInterval(pollFileBridge, 2000);
+        setInterval(pollClipboard, 1500);
     </script>
 </body>
 </html>

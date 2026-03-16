@@ -143,14 +143,42 @@ prepare_directories() {
   # Rebuild GDK pixbuf cache at runtime into a writable location
   # (ReadonlyRootfs means the default cache path /usr/lib/…/loaders.cache is not writable)
   local pixbuf_cache="/tmp/gdk-pixbuf-loaders.cache"
+  local pixbuf_loaders_dir="/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders"
+  local pixbuf_sys_cache="/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache"
+
+  # Debug: check if system loaders exist
+  if [[ -d "${pixbuf_loaders_dir}" ]]; then
+    local loader_count
+    loader_count="$(ls -1 "${pixbuf_loaders_dir}"/libpixbufloader-*.so 2>/dev/null | wc -l)"
+    emit_log "info" "pixbuf_loaders" "Found ${loader_count} pixbuf loader modules in ${pixbuf_loaders_dir}"
+    # Check for PNG loader specifically
+    if [[ -f "${pixbuf_loaders_dir}/libpixbufloader-png.so" ]]; then
+      emit_log "info" "pixbuf_png_ok" "PNG pixbuf loader found"
+    else
+      emit_log "error" "pixbuf_png_missing" "PNG pixbuf loader NOT found — GTK will crash on file dialogs"
+    fi
+  else
+    emit_log "error" "pixbuf_loaders_dir_missing" "Pixbuf loaders directory not found: ${pixbuf_loaders_dir}"
+  fi
+
   if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1; then
     gdk-pixbuf-query-loaders > "${pixbuf_cache}" 2>/dev/null || true
     if [[ -s "${pixbuf_cache}" ]]; then
       export GDK_PIXBUF_MODULE_FILE="${pixbuf_cache}"
-      emit_log "info" "pixbuf_cache" "GDK pixbuf cache generated at ${pixbuf_cache} ($(wc -l < "${pixbuf_cache}") lines)"
+      local png_lines
+      png_lines="$(grep -c 'png' "${pixbuf_cache}" 2>/dev/null || echo 0)"
+      emit_log "info" "pixbuf_cache" "GDK pixbuf cache at ${pixbuf_cache}: $(wc -l < "${pixbuf_cache}") lines, ${png_lines} PNG refs"
     else
-      emit_log "warn" "pixbuf_cache_empty" "GDK pixbuf cache is empty — GTK file dialogs may crash"
+      emit_log "warn" "pixbuf_cache_empty" "Runtime pixbuf cache is empty"
+      # Fall back to system cache
+      if [[ -f "${pixbuf_sys_cache}" ]]; then
+        export GDK_PIXBUF_MODULE_FILE="${pixbuf_sys_cache}"
+        emit_log "info" "pixbuf_cache_fallback" "Using system pixbuf cache: ${pixbuf_sys_cache}"
+      fi
     fi
+  elif [[ -f "${pixbuf_sys_cache}" ]]; then
+    export GDK_PIXBUF_MODULE_FILE="${pixbuf_sys_cache}"
+    emit_log "info" "pixbuf_cache_system" "Using system pixbuf cache (gdk-pixbuf-query-loaders not found)"
   fi
 
   # Also try updating the system cache (works if rootfs is writable)
@@ -351,6 +379,34 @@ prepare_appimage() {
     return 1
   fi
 
+  # If extract-and-run is enabled, pre-extract the AppImage now.
+  # This avoids the AppImage runtime overriding LD_LIBRARY_PATH at launch,
+  # which breaks system GTK pixbuf loaders and causes file dialog crashes.
+  if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" ]]; then
+    local extract_dir="${APP_DOWNLOAD_DIR}/squashfs-root-$(basename "${appimage_path}" .AppImage)"
+    if [[ ! -d "${extract_dir}" ]]; then
+      emit_log "info" "appimage_extract" "Pre-extracting AppImage to ${extract_dir}"
+      local extract_tmp="${APP_DOWNLOAD_DIR}/.extract-tmp-$$"
+      mkdir -p "${extract_tmp}"
+      (cd "${extract_tmp}" && "${staged_path}" --appimage-extract) >/dev/null 2>&1 || true
+      if [[ -d "${extract_tmp}/squashfs-root" ]]; then
+        mv "${extract_tmp}/squashfs-root" "${extract_dir}"
+        rm -rf "${extract_tmp}"
+        chmod -R u+rw "${extract_dir}" 2>/dev/null || true
+        chown -R "${APP_USER}:${APP_USER}" "${extract_dir}" 2>/dev/null || true
+        emit_log "info" "appimage_extracted" "AppImage extracted to ${extract_dir}"
+      else
+        emit_log "warn" "appimage_extract_failed" "AppImage extraction failed, falling back to --appimage-extract-and-run"
+        rm -rf "${extract_tmp}"
+        printf '%s' "${staged_path}"
+        return 0
+      fi
+    fi
+    # Return the extracted AppRun path instead of the AppImage
+    printf '%s' "${extract_dir}"
+    return 0
+  fi
+
   emit_log "info" "appimage_staged" "AppImage staged at ${staged_path} ($(stat -c%s "${staged_path}" 2>/dev/null || echo '?') bytes)"
   printf '%s' "${staged_path}"
 }
@@ -417,10 +473,12 @@ resolve_launch_spec() {
         return 1
       fi
       artifact_path="$(prepare_appimage "${APP_SOURCE_PATH}")"
-      printf -v quoted_path '%q' "${artifact_path}"
-      if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" ]]; then
-        RESOLVED_COMMAND="${quoted_path} --appimage-extract-and-run ${APP_ARGS}"
+      if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" && -d "${artifact_path}" ]]; then
+        # Pre-extracted: run AppRun directly with our clean environment
+        printf -v quoted_path '%q' "${artifact_path}/AppRun"
+        RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
       else
+        printf -v quoted_path '%q' "${artifact_path}"
         RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
       fi
       ;;
@@ -431,10 +489,12 @@ resolve_launch_spec() {
       fi
       artifact_path="$(download_artifact "${APP_SOURCE_URL}" "${APP_SHA256}" ".AppImage")"
       artifact_path="$(prepare_appimage "${artifact_path}")"
-      printf -v quoted_path '%q' "${artifact_path}"
-      if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" ]]; then
-        RESOLVED_COMMAND="${quoted_path} --appimage-extract-and-run ${APP_ARGS}"
+      if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" && -d "${artifact_path}" ]]; then
+        # Pre-extracted: run AppRun directly with our clean environment
+        printf -v quoted_path '%q' "${artifact_path}/AppRun"
+        RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
       else
+        printf -v quoted_path '%q' "${artifact_path}"
         RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
       fi
       ;;
@@ -488,9 +548,14 @@ export QT_AUTO_SCREEN_SCALE_FACTOR=\${QT_AUTO_SCREEN_SCALE_FACTOR:-0}
 export QT_SCALE_FACTOR=\${QT_SCALE_FACTOR:-1}
 export XCURSOR_SIZE=\${XCURSOR_SIZE:-24}
 export GTK_THEME=\${GTK_THEME:-Adwaita}
-# Point GTK to the runtime-generated pixbuf loader cache (critical for file dialogs)
+# Force GDK pixbuf loader paths — critical for GTK file dialogs in Electron/AppImage apps.
+# AppImages set LD_LIBRARY_PATH which can break the loader search.
+# We point explicitly to the system loaders baked into the Docker image.
+export GDK_PIXBUF_MODULEDIR=/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders
 if [[ -f /tmp/gdk-pixbuf-loaders.cache ]]; then
   export GDK_PIXBUF_MODULE_FILE=/tmp/gdk-pixbuf-loaders.cache
+elif [[ -f /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache ]]; then
+  export GDK_PIXBUF_MODULE_FILE=/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache
 fi
 mkdir -p "\${XDG_CONFIG_HOME}" "\${XDG_CACHE_HOME}" "\${XDG_DATA_HOME}" "\${HOME}"
 mkdir -p "\${HOME}/.config" "\${HOME}/.local/share" "\${HOME}/.cache"
@@ -505,6 +570,32 @@ EOF
     printf '/bin/bash -lc "$APP_PRE_LAUNCH_COMMAND" || true\n' >> /tmp/start-app.sh
   fi
   printf 'APP_LAUNCH_COMMAND=%q\n' "${RESOLVED_COMMAND}" >> /tmp/start-app.sh
+
+  # Create a GTK pixbuf wrapper that ensures loaders are found even if
+  # AppImage/AppRun modifies LD_LIBRARY_PATH at launch
+  cat >> /tmp/start-app.sh <<'WRAPEOF'
+# Write a wrapper that re-exports pixbuf paths — AppRun scripts often
+# override LD_LIBRARY_PATH which makes GTK unable to find PNG/SVG loaders
+_PIXBUF_WRAPPER=/tmp/_gtk_pixbuf_wrapper.sh
+cat > "${_PIXBUF_WRAPPER}" <<'INNEREOF'
+#!/bin/bash
+# Re-force system pixbuf loaders regardless of what AppRun changed
+export GDK_PIXBUF_MODULEDIR=/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders
+if [ -f /tmp/gdk-pixbuf-loaders.cache ]; then
+  export GDK_PIXBUF_MODULE_FILE=/tmp/gdk-pixbuf-loaders.cache
+elif [ -f /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache ]; then
+  export GDK_PIXBUF_MODULE_FILE=/usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders.cache
+fi
+exec "$@"
+INNEREOF
+chmod +x "${_PIXBUF_WRAPPER}"
+
+# If the command targets an AppRun inside an extracted AppImage, wrap it
+if echo "${APP_LAUNCH_COMMAND}" | grep -q "AppRun\|appimage-extract-and-run"; then
+  APP_LAUNCH_COMMAND="${_PIXBUF_WRAPPER} ${APP_LAUNCH_COMMAND}"
+fi
+WRAPEOF
+
   printf 'exec /bin/bash -lc "$APP_LAUNCH_COMMAND"\n' >> /tmp/start-app.sh
 
   chmod 0755 /tmp/start-app.sh

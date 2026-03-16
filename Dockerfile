@@ -74,8 +74,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   xterm \
   xvfb \
   && gdk-pixbuf-query-loaders --update-cache \
-  && echo "=== Pixbuf loaders registered ===" \
-  && gdk-pixbuf-query-loaders 2>/dev/null | grep -E 'module_path|png|svg' || true \
+  && echo "=== Pixbuf loaders ===" \
+  && ls -la /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader-png.so \
+  && (gdk-pixbuf-query-loaders 2>/dev/null | grep -c 'module_path' || true) \
   && (update-mime-database /usr/share/mime 2>/dev/null || true) \
   && (gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null || true) \
   && (gtk-update-icon-cache /usr/share/icons/Adwaita 2>/dev/null || true) \
