@@ -34,8 +34,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libglib2.0-0 \
   libgtk-3-0 \
   librsvg2-common \
+  librsvg2-2 \
   shared-mime-info \
   adwaita-icon-theme \
+  hicolor-icon-theme \
+  gnome-icon-theme \
   libnotify4 \
   libnss3 \
   libpango-1.0-0 \
@@ -65,10 +68,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   xdg-utils \
   wmctrl \
   xclip \
+  xsel \
+  xdotool \
   xterm \
   xvfb \
-  && if command -v gdk-pixbuf-query-loaders >/dev/null 2>&1; then gdk-pixbuf-query-loaders --update-cache; fi \
-  && update-mime-database /usr/share/mime \
+  && (gdk-pixbuf-query-loaders --update-cache 2>/dev/null || true) \
+  && (update-mime-database /usr/share/mime 2>/dev/null || true) \
+  && (gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null || true) \
+  && (gtk-update-icon-cache /usr/share/icons/Adwaita 2>/dev/null || true) \
   && rm -rf /var/lib/apt/lists/*
 
 RUN dbus-uuidgen > /etc/machine-id 2>/dev/null || true \

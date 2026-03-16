@@ -42,8 +42,14 @@
             background: #050505;
         }
 
+        /* Local cursor ON: use browser cursor, hide VNC-rendered cursor */
         #display.local-cursor canvas {
             cursor: default !important;
+        }
+
+        /* Local cursor OFF: let noVNC render VNC cursor, hide browser cursor */
+        #display.remote-cursor canvas {
+            cursor: none !important;
         }
 
         #hud {
@@ -160,6 +166,7 @@
             <label class="toggle"><input id="localCursor" type="checkbox">Local cursor</label>
             <label class="toggle"><input id="closeOnUnload" type="checkbox">Close app with tab</label>
             <label class="toggle"><input id="confirmOnClose" type="checkbox">Warn on close</label>
+            <button id="fullscreenButton" type="button" style="border:none;border-radius:999px;padding:8px 12px;background:rgba(59,130,246,0.82);color:white;cursor:pointer;font-size:12px;">⛶ Fullscreen</button>
             <button id="closeAppButton" type="button">Close app</button>
         </div>
     </div>
@@ -183,6 +190,7 @@
         const closeOnUnloadInput = document.getElementById("closeOnUnload");
         const confirmOnCloseInput = document.getElementById("confirmOnClose");
         const closeAppButton = document.getElementById("closeAppButton");
+        const fullscreenButton = document.getElementById("fullscreenButton");
         const sessionMatch = window.location.pathname.match(/^\/sessions\/([a-z0-9]+)/);
         const sessionId = sessionMatch ? sessionMatch[1] : "";
         const sessionToken = new URL(window.location.href).searchParams.get("token") || "";
@@ -192,9 +200,17 @@
 
         function applyLocalCursor(enabled) {
             display.classList.toggle("local-cursor", enabled);
-            if (rfb && rfb._cursor && rfb._cursor._canvas) {
-                // Hide noVNC fallback cursor canvas when local cursor mode is enabled.
-                rfb._cursor._canvas.style.visibility = enabled ? "hidden" : "";
+            display.classList.toggle("remote-cursor", !enabled);
+            if (rfb) {
+                // When local cursor is ON: hide VNC cursor entirely
+                // When local cursor is OFF: show VNC cursor, hide browser cursor
+                rfb.showDotCursor = false;
+                try {
+                    // Hide the noVNC software cursor canvas when using local cursor
+                    if (rfb._cursor && rfb._cursor._canvas) {
+                        rfb._cursor._canvas.style.visibility = enabled ? "hidden" : "";
+                    }
+                } catch { /* noVNC internals may vary */ }
             }
         }
 
@@ -382,6 +398,34 @@
             desktopName = e.detail.name || "";
             document.title = desktopName || readQueryVariable("title", "app-web");
         }
+
+        // ── Fullscreen toggle ──
+        fullscreenButton.addEventListener("click", () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(() => {});
+            } else {
+                document.exitFullscreen().catch(() => {});
+            }
+        });
+
+        document.addEventListener("fullscreenchange", () => {
+            fullscreenButton.textContent = document.fullscreenElement ? "⛶ Exit Fullscreen" : "⛶ Fullscreen";
+            // Trigger resize after fullscreen change
+            window.setTimeout(() => queueSessionResize(undefined, undefined, true), 200);
+        });
+
+        // ── Keyboard shortcuts (Ctrl+Shift+H = toggle HUD, F11 = fullscreen) ──
+        document.addEventListener("keydown", (e) => {
+            if (e.ctrlKey && e.shiftKey && e.key === "H") {
+                e.preventDefault();
+                const hud = document.getElementById("hud");
+                hud.style.display = hud.style.display === "none" ? "" : "none";
+            }
+            if (e.key === "F11") {
+                e.preventDefault();
+                fullscreenButton.click();
+            }
+        });
 
         closeAppButton.addEventListener("click", async () => {
             suppressCloseOnUnload = true;

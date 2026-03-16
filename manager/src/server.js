@@ -698,13 +698,14 @@ async function resizeSessionRuntime(session, { width, height, depth }) {
 
   const modeName = `${width}x${height}`;
   const resizeScript = [
+    `xrandr --fb ${modeName} 2>/dev/null && exit 0`,
     `OUTPUT=$(xrandr 2>/dev/null | awk '/ connected/{print $1; exit}')`,
     `OUTPUT=\${OUTPUT:-screen}`,
     `if ! xrandr 2>/dev/null | grep -q "${modeName}"; then`,
     `  xrandr --newmode "${modeName}" 0 ${width} ${width} ${width} ${width} ${height} ${height} ${height} ${height} 2>/dev/null || true`,
     `  xrandr --addmode "$OUTPUT" "${modeName}" 2>/dev/null || true`,
     `fi`,
-    `xrandr --output "$OUTPUT" --mode "${modeName}" 2>/dev/null || xrandr -s "${modeName}" 2>/dev/null || xrandr --fb ${modeName} 2>/dev/null || true`,
+    `xrandr --output "$OUTPUT" --mode "${modeName}" 2>/dev/null || xrandr -s "${modeName}" 2>/dev/null || true`,
   ].join("; ");
 
   const resizeCommand = [

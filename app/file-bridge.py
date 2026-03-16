@@ -251,8 +251,17 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
 
 def main():
-    server = HTTPServer((HOST, PORT), BridgeHandler)
-    server.serve_forever()
+    import sys
+    try:
+        server = HTTPServer((HOST, PORT), BridgeHandler)
+        print(f"File bridge listening on {HOST}:{PORT}", file=sys.stderr, flush=True)
+        server.serve_forever()
+    except OSError as e:
+        print(f"File bridge failed to start: {e}", file=sys.stderr, flush=True)
+        sys.exit(1)
+    except Exception as e:
+        print(f"File bridge error: {e}", file=sys.stderr, flush=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

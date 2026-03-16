@@ -104,7 +104,7 @@ ensure_user() {
   if [[ "${os_home}" != "${SESSION_HOME}" ]]; then
     mkdir -p "${os_home}" 2>/dev/null || true
     # Bind-link key dot-directories so apps writing to the OS home find writable storage
-    for d in .config .cache .local .pki .kube; do
+    for d in .config .cache .local .pki .kube .k8slens .mozilla .brave .joplin .logseq; do
       mkdir -p "${SESSION_HOME}/${d}" "${os_home}/${d}" 2>/dev/null || true
       mount --bind "${SESSION_HOME}/${d}" "${os_home}/${d}" 2>/dev/null || \
         ln -sfn "${SESSION_HOME}/${d}" "${os_home}/${d}" 2>/dev/null || true
@@ -139,6 +139,9 @@ prepare_directories() {
   chmod 1777 /dev/shm 2>/dev/null || true
 
   chown -R "${APP_USER}:${APP_USER}" "${APP_CACHE_DIR}" "${DATA_DIR}" "${XDG_RUNTIME_DIR}" "${SESSION_HOME}"
+
+  # Rebuild GDK pixbuf cache at runtime (rootfs may be readonly, caches may be stale)
+  gdk-pixbuf-query-loaders --update-cache 2>/dev/null || true
 }
 
 tail_component_log() {
@@ -181,25 +184,23 @@ apply_display_geometry() {
   local height=${2:-${SCREEN_HEIGHT}}
   local mode_name="${width}x${height}"
 
-  # For Xvfb we must create proper RandR modes, not just use --fb (which only clips
-  # the framebuffer without telling apps the real resolution has changed).
-  # Dummy mode timings (all zeros) work fine with Xvfb's virtual output.
+  # xrandr --fb is the most reliable way to resize the Xvfb framebuffer.
+  # It changes the screen dimensions that apps see without needing RandR 1.2 mode support.
+  # We also try proper mode creation as a fallback for non-Xvfb X servers.
   local xrandr_script
   xrandr_script="$(cat <<XEOF
-# Detect the output name (usually 'screen' for Xvfb)
+# Try framebuffer resize first (most reliable with Xvfb)
+xrandr --fb ${mode_name} 2>/dev/null && exit 0
+
+# Fallback: RandR mode creation
 OUTPUT=\$(xrandr 2>/dev/null | awk '/ connected/{print \$1; exit}')
 OUTPUT=\${OUTPUT:-screen}
-
-# Create the mode if it doesn't already exist
 if ! xrandr 2>/dev/null | grep -q "${mode_name}"; then
   xrandr --newmode "${mode_name}" 0 ${width} ${width} ${width} ${width} ${height} ${height} ${height} ${height} 2>/dev/null || true
   xrandr --addmode "\${OUTPUT}" "${mode_name}" 2>/dev/null || true
 fi
-
-# Switch to the mode
 xrandr --output "\${OUTPUT}" --mode "${mode_name}" 2>/dev/null || \
-  xrandr -s "${mode_name}" 2>/dev/null || \
-  xrandr --fb ${mode_name} 2>/dev/null || true
+  xrandr -s "${mode_name}" 2>/dev/null || true
 XEOF
   )"
 
@@ -454,6 +455,12 @@ export ELECTRON_DISABLE_SANDBOX=1
 export ELECTRON_NO_ATTACH_CONSOLE=1
 export ELECTRON_DISABLE_GPU=\${ELECTRON_DISABLE_GPU:-0}
 export CHROME_DEVEL_SANDBOX=""
+export GDK_SCALE=\${GDK_SCALE:-1}
+export GDK_DPI_SCALE=\${GDK_DPI_SCALE:-1}
+export QT_AUTO_SCREEN_SCALE_FACTOR=\${QT_AUTO_SCREEN_SCALE_FACTOR:-0}
+export QT_SCALE_FACTOR=\${QT_SCALE_FACTOR:-1}
+export XCURSOR_SIZE=\${XCURSOR_SIZE:-24}
+export GTK_THEME=\${GTK_THEME:-Adwaita}
 mkdir -p "\${XDG_CONFIG_HOME}" "\${XDG_CACHE_HOME}" "\${XDG_DATA_HOME}" "\${HOME}"
 mkdir -p "\${HOME}/.config" "\${HOME}/.local/share" "\${HOME}/.cache"
 mkdir -p "\${HOME}/.kube" "\${HOME}/.k8slens" "\${HOME}/.pki/nssdb"
@@ -474,7 +481,11 @@ EOF
 
 start_xvfb() {
   emit_log "info" "xvfb_start" "Starting Xvfb"
-  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" Xvfb "${DISPLAY}" -screen 0 "${XVFB_MAX_WIDTH}x${XVFB_MAX_HEIGHT}x${SCREEN_DEPTH}" -ac -nolisten tcp >>"${LOG_DIR}/xvfb.log" 2>&1 &
+  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" Xvfb "${DISPLAY}" \
+    -screen 0 "${XVFB_MAX_WIDTH}x${XVFB_MAX_HEIGHT}x${SCREEN_DEPTH}" \
+    +extension RANDR +extension GLX \
+    -dpi 96 \
+    -ac -nolisten tcp >>"${LOG_DIR}/xvfb.log" 2>&1 &
   pids+=("$!")
 }
 
