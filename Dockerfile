@@ -73,10 +73,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   xdotool \
   xterm \
   xvfb \
-  && gdk-pixbuf-query-loaders --update-cache \
+  && GDK_PIXBUF_QL="$(find /usr/lib -name 'gdk-pixbuf-query-loaders*' -type f 2>/dev/null | head -1)" \
+  && if [ -n "$GDK_PIXBUF_QL" ]; then echo "Found: $GDK_PIXBUF_QL"; "$GDK_PIXBUF_QL" --update-cache; fi \
   && echo "=== Pixbuf loaders ===" \
-  && ls -la /usr/lib/x86_64-linux-gnu/gdk-pixbuf-2.0/2.10.0/loaders/libpixbufloader-png.so \
-  && (gdk-pixbuf-query-loaders 2>/dev/null | grep -c 'module_path' || true) \
+  && ls /usr/lib/*/gdk-pixbuf-2.0/*/loaders/libpixbufloader-png.so 2>/dev/null || echo "PNG loader not found" \
+  && cat /usr/lib/*/gdk-pixbuf-2.0/*/loaders.cache 2>/dev/null | grep -c 'module_path' || true \
   && (update-mime-database /usr/share/mime 2>/dev/null || true) \
   && (gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null || true) \
   && (gtk-update-icon-cache /usr/share/icons/Adwaita 2>/dev/null || true) \
