@@ -95,6 +95,21 @@ ensure_user() {
   if ! id "${APP_USER}" >/dev/null 2>&1; then
     useradd --create-home --shell /bin/bash "${APP_USER}"
   fi
+
+  # Ensure the OS home directory exists and points to SESSION_HOME
+  # (ReadonlyRootfs means /home is a tmpfs, so we must recreate it each boot)
+  local os_home
+  os_home="$(eval echo "~${APP_USER}" 2>/dev/null || echo "/home/${APP_USER}")"
+  if [[ "${os_home}" != "${SESSION_HOME}" ]]; then
+    mkdir -p "${os_home}" 2>/dev/null || true
+    # Bind-link key dot-directories so apps writing to the OS home find writable storage
+    for d in .config .cache .local .pki .kube; do
+      mkdir -p "${SESSION_HOME}/${d}" "${os_home}/${d}" 2>/dev/null || true
+      mount --bind "${SESSION_HOME}/${d}" "${os_home}/${d}" 2>/dev/null || \
+        ln -sfn "${SESSION_HOME}/${d}" "${os_home}/${d}" 2>/dev/null || true
+    done
+    chown -R "${APP_USER}:${APP_USER}" "${os_home}" 2>/dev/null || true
+  fi
 }
 
 prepare_directories() {
@@ -180,6 +195,44 @@ wait_for_port() {
   done
 }
 
+validate_binary() {
+  local file_path=$1
+  local file_size
+
+  if [[ ! -f "${file_path}" ]]; then
+    emit_log "error" "artifact_missing" "Downloaded file does not exist: ${file_path}"
+    return 1
+  fi
+
+  file_size="$(stat -c%s "${file_path}" 2>/dev/null || echo 0)"
+  if (( file_size < 1024 )); then
+    emit_log "error" "artifact_too_small" "Downloaded file is only ${file_size} bytes (likely an error page, not a binary): ${file_path}"
+    rm -f "${file_path}"
+    return 1
+  fi
+
+  local magic
+  magic="$(head -c 4 "${file_path}" | od -A n -t x1 | tr -d ' ')"
+  case "${magic}" in
+    7f454c46) ;; # ELF binary - valid
+    41490200) ;; # AppImage type 2 - valid
+    *)
+      # Check if it's text/HTML (bad download)
+      if file "${file_path}" 2>/dev/null | grep -qi "text\|html\|xml"; then
+        emit_log "error" "artifact_not_binary" "Downloaded file is text/HTML, not a binary. The URL likely requires authentication or returned an error page."
+        local preview
+        preview="$(head -c 200 "${file_path}" 2>/dev/null)"
+        emit_log "error" "artifact_preview" "First 200 bytes: ${preview}"
+        rm -f "${file_path}"
+        return 1
+      fi
+      emit_log "warn" "artifact_unknown_format" "File magic ${magic} is not standard ELF/AppImage, proceeding anyway"
+      ;;
+  esac
+
+  return 0
+}
+
 download_artifact() {
   local url=$1
   local sha256_value=$2
@@ -194,13 +247,30 @@ download_artifact() {
   cache_key="$(printf '%s' "${url}" | sha256sum | awk '{print $1}')"
   target_path="${APP_CACHE_DIR}/${cache_key}-${file_name}"
 
+  if [[ -f "${target_path}" ]]; then
+    # Validate cached file - remove if corrupt
+    if ! validate_binary "${target_path}"; then
+      emit_log "warn" "cache_invalidated" "Cached artifact was invalid, re-downloading"
+    fi
+  fi
+
   if [[ ! -f "${target_path}" ]]; then
     emit_log "info" "artifact_download_start" "Downloading ${url}"
-    curl --fail --silent --show-error --location "${url}" --output "${target_path}.tmp"
+    curl --fail --silent --show-error --location \
+      --retry 3 --retry-delay 2 \
+      --connect-timeout 30 --max-time 600 \
+      "${url}" --output "${target_path}.tmp"
     if [[ -n "${sha256_value}" ]]; then
       printf '%s  %s\n' "${sha256_value}" "${target_path}.tmp" | sha256sum --check --status
     fi
+    if ! validate_binary "${target_path}.tmp"; then
+      emit_log "error" "artifact_download_invalid" "Downloaded file from ${url} is not a valid binary"
+      return 1
+    fi
     mv "${target_path}.tmp" "${target_path}"
+    emit_log "info" "artifact_download_complete" "Downloaded $(stat -c%s "${target_path}" 2>/dev/null || echo '?') bytes to ${target_path}"
+  else
+    emit_log "info" "artifact_cache_hit" "Using cached artifact: ${target_path} ($(stat -c%s "${target_path}" 2>/dev/null || echo '?') bytes)"
   fi
 
   printf '%s' "${target_path}"
@@ -211,9 +281,23 @@ prepare_appimage() {
   local staged_path
 
   staged_path="${APP_DOWNLOAD_DIR}/$(basename "${appimage_path}")"
+
+  if [[ ! -f "${appimage_path}" ]]; then
+    emit_log "error" "appimage_source_missing" "Source AppImage not found: ${appimage_path}"
+    return 1
+  fi
+
   cp -f "${appimage_path}" "${staged_path}"
   chmod 0755 "${staged_path}"
   chown "${APP_USER}:${APP_USER}" "${staged_path}" 2>/dev/null || true
+
+  # Verify the staged file is executable
+  if [[ ! -x "${staged_path}" ]]; then
+    emit_log "error" "appimage_not_executable" "Staged AppImage is not executable: ${staged_path}"
+    return 1
+  fi
+
+  emit_log "info" "appimage_staged" "AppImage staged at ${staged_path} ($(stat -c%s "${staged_path}" 2>/dev/null || echo '?') bytes)"
   printf '%s' "${staged_path}"
 }
 
@@ -345,6 +429,7 @@ export ELECTRON_DISABLE_GPU=\${ELECTRON_DISABLE_GPU:-0}
 export CHROME_DEVEL_SANDBOX=""
 mkdir -p "\${XDG_CONFIG_HOME}" "\${XDG_CACHE_HOME}" "\${XDG_DATA_HOME}" "\${HOME}"
 mkdir -p "\${HOME}/.config" "\${HOME}/.local/share" "\${HOME}/.cache"
+mkdir -p "\${HOME}/.kube" "\${HOME}/.k8slens" "\${HOME}/.pki/nssdb"
 EOF
 
   if [[ -n "${RESOLVED_WORKDIR}" ]]; then
@@ -487,6 +572,38 @@ start_websockify() {
   pids+=("$!")
 }
 
+start_dbus() {
+  # Start a system D-Bus daemon if the socket doesn't exist yet
+  # Many Electron/desktop apps expect a system bus for notifications, secrets, etc.
+  if [[ ! -S /run/dbus/system_bus_socket ]]; then
+    mkdir -p /run/dbus 2>/dev/null || true
+    # Ensure machine-id exists (required by dbus-daemon --system)
+    # Rootfs is read-only so we generate it into /run and bind-mount or symlink
+    if [[ ! -f /etc/machine-id ]] || [[ ! -s /etc/machine-id ]]; then
+      dbus-uuidgen > /run/machine-id 2>/dev/null || true
+      mount --bind /run/machine-id /etc/machine-id 2>/dev/null || \
+        ln -sf /run/machine-id /etc/machine-id 2>/dev/null || true
+    fi
+    if command -v dbus-daemon >/dev/null 2>&1; then
+      dbus-daemon --system --nofork --nopidfile 2>/dev/null &
+      pids+=("$!")
+      # Give it a moment to create the socket
+      local retries=10
+      while [[ ! -S /run/dbus/system_bus_socket ]] && (( retries > 0 )); do
+        sleep 0.1
+        retries=$((retries - 1))
+      done
+      if [[ -S /run/dbus/system_bus_socket ]]; then
+        emit_log "info" "dbus_started" "System D-Bus daemon started"
+      else
+        emit_log "warn" "dbus_failed" "System D-Bus daemon did not create socket in time"
+      fi
+    else
+      emit_log "warn" "dbus_missing" "dbus-daemon not found, some apps may not function correctly"
+    fi
+  fi
+}
+
 start_application() {
   emit_log "info" "app_launch" "Launching ${APP_NAME}"
   runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" dbus-run-session -- /bin/bash /tmp/start-app.sh >>"${LOG_DIR}/app.log" 2>&1 &
@@ -512,6 +629,7 @@ main() {
   wait_for_port 127.0.0.1 "${VNC_PORT}"
   start_websockify
   wait_for_port 127.0.0.1 "${PORT}"
+  start_dbus
   start_application
 
   emit_log "info" "session_ready" "Session services are ready"

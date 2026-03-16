@@ -93,16 +93,53 @@
     }
   },
   {
+    "id": "vscodium",
+    "name": "VSCodium",
+    "description": "Open-source VS Code editor delivered as an Electron AppImage.",
+    "featured": true,
+    "categories": ["development", "editor"],
+    "tags": ["electron", "vscode", "ide"],
+    "source": {
+      "type": "appimage-url",
+      "url": "https://github.com/VSCodium/vscodium/releases/download/1.110.11631/VSCodium-1.110.11631.glibc2.30-x86_64.AppImage",
+      "sha256": ""
+    },
+    "launch": {
+      "args": "--no-sandbox --disable-gpu --disable-dev-shm-usage --disable-gpu-sandbox",
+      "extractAndRun": true,
+      "workingDirectory": "/data/home",
+      "healthcheckPath": "/"
+    },
+    "resources": {
+      "cpuCores": 2,
+      "memoryMb": 4096
+    },
+    "display": {
+      "width": 1440,
+      "height": 900,
+      "depth": 24
+    },
+    "storage": {
+      "mode": "per-client"
+    },
+    "session": {
+      "resume": true
+    },
+    "env": {
+      "ELECTRON_DISABLE_SANDBOX": "1",
+      "ELECTRON_DISABLE_GPU": "1"
+    }
+  },
+  {
     "id": "lens",
     "name": "Lens Desktop",
-    "description": "Kubernetes IDE for managing clusters. Electron-based AppImage.",
-    "featured": true,
+    "description": "Kubernetes IDE. Download the AppImage from https://k8slens.dev/download and place it in the session image, then update source.path.",
+    "featured": false,
     "categories": ["devops", "kubernetes"],
     "tags": ["electron", "k8s", "ide"],
     "source": {
-      "type": "appimage-url",
-      "url": "https://api.k8slens.dev/binaries/Lens-2024.11.261329-latest.x86_64.AppImage",
-      "sha256": ""
+      "type": "appimage-file",
+      "path": "/opt/lens/Lens.AppImage"
     },
     "launch": {
       "args": "--no-sandbox --disable-gpu --disable-dev-shm-usage --disable-gpu-sandbox",

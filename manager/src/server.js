@@ -787,6 +787,7 @@ function buildDockerContainerSpec(session, app, labels, env) {
         "/tmp": `rw,exec,nosuid,nodev,size=${tmpSizeBytes}`,
         "/run": "rw,nosuid,nodev,size=67108864",
         "/data": `rw,exec,nosuid,nodev,size=${dataSizeBytes}`,
+        "/home": "rw,nosuid,nodev,size=67108864",
       },
       CapAdd: ["CHOWN", "SETUID", "SETGID", "DAC_OVERRIDE", "SYS_ADMIN"],
       CapDrop: ["ALL"],
@@ -806,12 +807,14 @@ function buildKubernetesPodSpec(session, app, labels, env) {
     { name: "run", emptyDir: {} },
     { name: "data", emptyDir: { sizeLimit: dataSizeLimit } },
     { name: "dshm", emptyDir: { medium: "Memory", sizeLimit: shmSizeLimit } },
+    { name: "home", emptyDir: { sizeLimit: "64Mi" } },
   ];
   const volumeMounts = [
     { name: "tmp", mountPath: "/tmp" },
     { name: "run", mountPath: "/run" },
     { name: "data", mountPath: "/data" },
     { name: "dshm", mountPath: "/dev/shm" },
+    { name: "home", mountPath: "/home" },
   ];
 
   if (config.k8sSessionCacheClaim) {

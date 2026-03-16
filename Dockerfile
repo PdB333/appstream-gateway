@@ -46,6 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libxshmfence1 \
   libxss1 \
   libxtst6 \
+  file \
   mesa-utils \
   openbox \
   procps \
@@ -63,7 +64,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   xvfb \
   && rm -rf /var/lib/apt/lists/*
 
-RUN useradd --create-home --shell /bin/bash "${APP_USER}" \
+RUN dbus-uuidgen > /etc/machine-id 2>/dev/null || true \
+  && useradd --create-home --shell /bin/bash "${APP_USER}" \
   && mkdir -p /app /cache /data \
   && chown -R "${APP_USER}:${APP_USER}" /cache /data /home/"${APP_USER}"
 
