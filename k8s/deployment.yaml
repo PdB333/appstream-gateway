@@ -16,6 +16,8 @@ spec:
         app.kubernetes.io/name: app-web-manager
     spec:
       serviceAccountName: app-web-manager
+      imagePullSecrets:
+        - name: ghcr-creds
       containers:
         - name: manager
           image: ghcr.io/pdb333/appstream-gateway-manager:latest
@@ -55,7 +57,7 @@ spec:
             - name: DEFAULT_SESSION_TTL
               value: 2h
             - name: SESSION_READY_TIMEOUT
-              value: 90s
+              value: 5m
             - name: REAPER_INTERVAL
               value: 30s
             - name: SESSION_LOG_TAIL

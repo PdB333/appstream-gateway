@@ -9,6 +9,7 @@ ENV DATA_DIR=/data
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   bash \
+  bzip2 \
   ca-certificates \
   curl \
   desktop-file-utils \

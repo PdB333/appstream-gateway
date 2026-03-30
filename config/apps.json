@@ -134,8 +134,9 @@
   {
     "id": "lens",
     "name": "Lens Desktop",
-    "description": "Kubernetes IDE. Download the AppImage from https://k8slens.dev/download and place it in the session image, then update source.path.",
+    "description": "Kubernetes IDE — requires manual AppImage install. See https://k8slens.dev/download",
     "featured": false,
+    "disabled": true,
     "categories": ["devops", "kubernetes"],
     "tags": ["electron", "k8s", "ide"],
     "source": {

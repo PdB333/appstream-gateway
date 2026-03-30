@@ -8,7 +8,9 @@ export async function loadCatalog(catalogPath, defaults) {
     throw new Error("Application catalog must be a JSON array");
   }
 
-  const apps = rawCatalog.map((entry) => normalizeApp(entry, defaults));
+  const apps = rawCatalog
+    .filter((entry) => !entry.disabled)
+    .map((entry) => normalizeApp(entry, defaults));
   return new Map(apps.map((app) => [app.id, app]));
 }
 

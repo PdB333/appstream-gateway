@@ -498,18 +498,22 @@
         });
 
         // ── Keyboard shortcuts ──
-        document.addEventListener("keydown", (e) => {
+        // Capture at window level during capture phase so it fires BEFORE noVNC grabs the event
+        window.addEventListener("keydown", (e) => {
             // Ctrl+Shift+H = toggle HUD
-            if (e.ctrlKey && e.shiftKey && e.key === "H") {
+            if (e.ctrlKey && e.shiftKey && (e.key === "H" || e.key === "h")) {
                 e.preventDefault();
+                e.stopImmediatePropagation();
                 setHudVisible(!hudVisible);
+                return;
             }
             // F11 = fullscreen
             if (e.key === "F11") {
                 e.preventDefault();
+                e.stopImmediatePropagation();
                 fullscreenButton.click();
             }
-        });
+        }, true); // ← capture phase
 
         // ── Close app ──
         closeAppButton.addEventListener("click", async () => {
