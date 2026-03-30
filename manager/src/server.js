@@ -714,9 +714,9 @@ function sanitizeLabel(value) {
   // Kubernetes labels: alphanumeric, '-', '_', '.', max 63 chars, must start/end with alnum
   return String(value || "")
     .replace(/[^A-Za-z0-9._-]/g, "_")
+    .slice(0, 63)
     .replace(/^[^A-Za-z0-9]+/, "")
-    .replace(/[^A-Za-z0-9]+$/, "")
-    .slice(0, 63);
+    .replace(/[^A-Za-z0-9]+$/, "");
 }
 
 function clampSessionDimension(value, min, max) {
@@ -825,15 +825,15 @@ function resolveStorage(app, clientId) {
 
 function buildContainerSpec(session, app) {
   const labels = {
-    "appweb.managed": "true",
-    "appweb.session-id": session.id,
-    "appweb.app-id": app.id,
+    "appweb.managed": sanitizeLabel("true"),
+    "appweb.session-id": sanitizeLabel(session.id),
+    "appweb.app-id": sanitizeLabel(app.id),
     "appweb.app-name": sanitizeLabel(app.name),
     "appweb.client-id": sanitizeLabel(session.clientId || ""),
     "appweb.created-at": sanitizeLabel(String(session.createdAt)),
-    "appweb.storage-mode": session.storage.mode,
+    "appweb.storage-mode": sanitizeLabel(session.storage.mode),
     "appweb.home-volume": sanitizeLabel(session.storage.homeVolumeName || ""),
-    "appweb.source-type": app.source.type,
+    "appweb.source-type": sanitizeLabel(app.source.type),
   };
 
   const env = [

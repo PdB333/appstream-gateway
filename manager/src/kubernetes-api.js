@@ -46,11 +46,14 @@ export class KubernetesClient {
   }
 
   async createContainer(name, body) {
+    const labels = sanitizeMetadataLabels(body?.metadata?.labels);
+    const podName = sanitizePodName(name, "app-web-session");
     const manifest = {
       ...body,
       metadata: {
         ...(body.metadata || {}),
-        name,
+        labels,
+        name: podName,
         namespace: this.namespace,
       },
     };
@@ -203,6 +206,35 @@ export class KubernetesClient {
       request.end();
     });
   }
+}
+
+function sanitizeMetadataLabels(labels) {
+  const input = labels && typeof labels === "object" ? labels : {};
+  const output = {};
+  for (const [key, value] of Object.entries(input)) {
+    output[String(key)] = sanitizeLabelValue(value);
+  }
+  return output;
+}
+
+function sanitizeLabelValue(value) {
+  // Kubernetes label value: empty or 1-63 chars [A-Za-z0-9._-], start/end alnum.
+  return String(value ?? "")
+    .replace(/[^A-Za-z0-9._-]/g, "_")
+    .slice(0, 63)
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .replace(/[^A-Za-z0-9]+$/, "");
+}
+
+function sanitizePodName(value, fallback = "app-web-session") {
+  // Pod metadata.name uses DNS-1123 label format.
+  const base = String(value || fallback)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/^-+/, "")
+    .replace(/-+$/, "")
+    .slice(0, 63);
+  return base || fallback;
 }
 
 function normalizePodSummary(pod) {
