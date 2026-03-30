@@ -42,6 +42,7 @@ FILES_DIR.mkdir(parents=True, exist_ok=True)
 DOWNLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 SAFE_ID = re.compile(r"^[a-zA-Z0-9._-]+$")
+MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", str(512 * 1024 * 1024)))  # 512 MB
 # Track clipboard to detect changes (session → host)
 _last_clipboard = ""
 _last_clipboard_time = 0
@@ -202,8 +203,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _read_body(self):
+    def _read_body(self, max_bytes=MAX_UPLOAD_BYTES):
         length = int(self.headers.get("Content-Length", 0))
+        if length > max_bytes:
+            self._json_response(413, {"error": f"Body too large (max {max_bytes} bytes)"})
+            return None
         if length > 0:
             return self.rfile.read(length)
         return b""
@@ -283,7 +287,9 @@ class BridgeHandler(BaseHTTPRequestHandler):
         path = unquote(self.path).split("?")[0].rstrip("/")
 
         if path == "/clipboard":
-            body = self._read_body()
+            body = self._read_body(max_bytes=1 * 1024 * 1024)  # 1 MB max for clipboard
+            if body is None:
+                return
             try:
                 data = json.loads(body)
                 text = data.get("text", "")
@@ -296,6 +302,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
         elif path == "/upload":
             body = self._read_body()
+            if body is None:
+                return
             # Parse multipart or raw upload
             content_type = self.headers.get("Content-Type", "")
             filename = "upload"

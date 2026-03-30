@@ -544,7 +544,7 @@
       }
 
       catalogApps.querySelectorAll("[data-launch]").forEach((button) => {
-        button.addEventListener("click", () => createSession({ appId: button.dataset.launch, clientId: state.clientId, resumeIfExists: true }));
+        button.addEventListener("click", () => launchCatalogApp(button.dataset.launch));
       });
 
       catalogApps.querySelectorAll("[data-favorite]").forEach((button) => {
@@ -623,27 +623,31 @@
       }
     }
 
-    function createPendingWindow() {
-      const popup = window.open("", "_blank");
-      if (!popup) {
-        return null;
+    function launchCatalogApp(appId) {
+      if (state.meta?.adminRequired && !state.adminToken) {
+        setActionNotice("Enter the admin token and click Save access before launching a session.", "error");
+        return;
       }
 
-      try {
-        popup.document.title = "Launching session";
-        popup.document.body.innerHTML = "<p style=\"font-family: sans-serif; padding: 24px;\">Launching session...</p>";
-      } catch {}
-
-      return popup;
+      // Use the /app/<id> endpoint which creates/resumes server-side and returns a 302 redirect.
+      // This avoids popup blockers entirely — the browser follows a normal navigation.
+      const params = new URLSearchParams();
+      if (state.adminToken) {
+        params.set("adminToken", state.adminToken);
+      }
+      if (state.clientId) {
+        params.set("clientId", state.clientId);
+      }
+      const query = params.toString();
+      const url = `/app/${encodeURIComponent(appId)}${query ? `?${query}` : ""}`;
+      window.open(url, "_blank", "noopener,noreferrer");
+      setActionNotice(`Launching ${appId}...`);
+      // Refresh session list after a short delay to show the new session
+      setTimeout(refreshData, 3000);
     }
 
     async function createSession(payload) {
-      const popup = createPendingWindow();
-
       if (state.meta?.adminRequired && !state.adminToken) {
-        if (popup && !popup.closed) {
-          popup.close();
-        }
         setActionNotice("Enter the admin token and click Save access before launching a session.", "error");
         diagnosticsSummary.textContent = "An admin token is required to create sessions.";
         return;
@@ -656,23 +660,13 @@
           method: "POST",
           body: JSON.stringify(payload),
         });
-        if (popup && !popup.closed) {
-          popup.location.replace(session.url);
-          try {
-            popup.opener = null;
-          } catch {}
-        } else {
-          setActionNotice(
-            `Session ready. <a href="${escapeHtml(session.url)}" target="_blank" rel="noreferrer">Open session</a>`,
-            "success",
-            true
-          );
-        }
+        setActionNotice(
+          `Session ready. <a href="${escapeHtml(session.url)}" target="_blank" rel="noreferrer">Open session</a>`,
+          "success",
+          true
+        );
         await refreshData();
       } catch (error) {
-        if (popup && !popup.closed) {
-          popup.close();
-        }
         setActionNotice(error.message, "error");
         diagnosticsSummary.textContent = error.message;
       }

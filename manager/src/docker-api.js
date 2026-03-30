@@ -235,7 +235,7 @@ function demuxDockerLogStream(buffer) {
       break;
     }
 
-    output += buffer.slice(frameStart, frameEnd).toString("utf8");
+    output += buffer.subarray(frameStart, frameEnd).toString("utf8");
     offset = frameEnd;
     parsedFrames += 1;
   }

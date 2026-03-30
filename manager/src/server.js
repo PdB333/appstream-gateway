@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import http from "node:http";
 import net from "node:net";
 import { readFile } from "node:fs/promises";
@@ -225,11 +226,23 @@ function requireAdmin(request, url = null) {
   const bearerToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
   const queryToken = url?.searchParams.get("adminToken") || "";
   const token = bearerToken || queryToken;
-  if (token !== config.adminApiToken) {
+  if (!constantTimeEqual(token, config.adminApiToken)) {
     const error = new Error("Unauthorized");
     error.statusCode = 401;
     throw error;
   }
+}
+
+function constantTimeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") {
+    return false;
+  }
+  const bufA = Buffer.from(a);
+  const bufB = Buffer.from(b);
+  if (bufA.length !== bufB.length) {
+    return false;
+  }
+  return crypto.timingSafeEqual(bufA, bufB);
 }
 
 function getClientId(request, body = null, url = null) {
@@ -1193,8 +1206,9 @@ async function reapExpiredSessions() {
     await refreshSessionState(session);
 
     const inactive = now > computeExpiry(session.lastActivityAt, session.sessionTtlMs);
+    const isRunning = session.status === "ready" || session.status === "starting";
     const stoppedTooLong =
-      session.status !== "ready" && now - session.lastActivityAt > config.stoppedSessionGraceMs;
+      !isRunning && now - session.lastActivityAt > config.stoppedSessionGraceMs;
 
     if (inactive || stoppedTooLong) {
       await destroySession(session.id, inactive ? "session_ttl" : "stopped_grace");

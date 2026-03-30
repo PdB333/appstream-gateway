@@ -48,8 +48,14 @@ export function verifySessionToken(secret, token, expectedSessionId) {
     return false;
   }
 
-  const payload = JSON.parse(fromBase64Url(encodedPayload).toString("utf8"));
-  if (payload.sessionId !== expectedSessionId) {
+  let payload;
+  try {
+    payload = JSON.parse(fromBase64Url(encodedPayload).toString("utf8"));
+  } catch {
+    return false;
+  }
+
+  if (!payload || payload.sessionId !== expectedSessionId) {
     return false;
   }
 
