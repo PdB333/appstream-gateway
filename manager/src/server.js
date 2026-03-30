@@ -550,15 +550,52 @@ function markSessionReused(session) {
 }
 
 async function getStartupFailureLogTail(containerId) {
+  const parts = [];
+
+  // Try to get container logs
   try {
     const logs = await runtimeClient.getContainerLogs(containerId, {
       tail: Math.min(config.sessionLogTail, 80),
       timestamps: true,
     });
-    return summarizeLogTail(logs, 20);
+    const tail = summarizeLogTail(logs, 20);
+    if (tail) {
+      parts.push(tail);
+    }
   } catch (error) {
-    return "Unable to fetch startup logs: " + error.message;
+    parts.push("Unable to fetch startup logs: " + error.message);
   }
+
+  // Try to get pod state details (K8s waiting/terminated reasons)
+  try {
+    const inspection = await runtimeClient.inspectContainer(containerId);
+    const state = inspection.State || {};
+    const details = [];
+    if (state.Error) details.push(`Error: ${state.Error}`);
+    if (state.ExitCode !== undefined && state.ExitCode !== 0) details.push(`ExitCode: ${state.ExitCode}`);
+    if (state.OOMKilled) details.push("OOMKilled: true");
+    // K8s-specific: check raw pod status for waiting reasons
+    const pod = inspection.Pod;
+    if (pod) {
+      const cs = pod.status?.containerStatuses?.[0];
+      const waiting = cs?.state?.waiting;
+      const terminated = cs?.state?.terminated;
+      if (waiting?.reason) details.push(`Waiting: ${waiting.reason} - ${waiting.message || ""}`);
+      if (terminated?.reason) details.push(`Terminated: ${terminated.reason} - ${terminated.message || ""}`);
+      // Pod conditions (e.g. Unschedulable)
+      const conditions = (pod.status?.conditions || [])
+        .filter(c => c.status === "False" || c.type === "PodScheduled" && c.status === "False")
+        .map(c => `${c.type}: ${c.reason || ""} ${c.message || ""}`.trim());
+      if (conditions.length) details.push(...conditions);
+    }
+    if (details.length) {
+      parts.push("Pod state: " + details.join("; "));
+    }
+  } catch {
+    // inspection failed, skip
+  }
+
+  return parts.join("\n");
 }
 
 function buildStartupFailureMessage(message, logTail) {
