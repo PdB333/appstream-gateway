@@ -46,6 +46,7 @@ const config = {
   k8sSessionImagePullPolicy: process.env.K8S_SESSION_IMAGE_PULL_POLICY || "IfNotPresent",
   k8sSessionCacheClaim: process.env.K8S_SESSION_CACHE_CLAIM || "",
   k8sSessionHomeClaim: process.env.K8S_SESSION_HOME_CLAIM || "",
+  k8sSessionImagePullSecret: process.env.K8S_SESSION_IMAGE_PULL_SECRET || "",
   sessionSecret: process.env.SESSION_SECRET || "insecure-development-secret",
   sessionTokenTtlMs: parseDurationMs(process.env.SESSION_TOKEN_TTL, 7 * 24 * 60 * 60 * 1000),
   defaultSessionTtlMs: parseDurationMs(process.env.DEFAULT_SESSION_TTL, 2 * 60 * 60 * 1000),
@@ -973,6 +974,9 @@ function buildKubernetesPodSpec(session, app, labels, env) {
       restartPolicy: "Never",
       automountServiceAccountToken: false,
       serviceAccountName: config.k8sSessionPodServiceAccount,
+      ...(config.k8sSessionImagePullSecret
+        ? { imagePullSecrets: [{ name: config.k8sSessionImagePullSecret }] }
+        : {}),
       containers: [
         {
           name: "session",

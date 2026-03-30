@@ -18,7 +18,7 @@ spec:
       serviceAccountName: app-web-manager
       containers:
         - name: manager
-          image: ghcr.io/your-org/app-web-manager:latest
+          image: ghcr.io/pdb333/appstream-gateway-manager:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
@@ -33,7 +33,7 @@ spec:
             - name: SESSION_BACKEND
               value: kubernetes
             - name: SESSION_IMAGE
-              value: ghcr.io/your-org/app-web-session:latest
+              value: ghcr.io/pdb333/appstream-gateway-session:latest
             - name: K8S_NAMESPACE
               valueFrom:
                 fieldRef:
@@ -42,6 +42,8 @@ spec:
               value: app-web-session
             - name: K8S_SESSION_IMAGE_PULL_POLICY
               value: IfNotPresent
+            - name: K8S_SESSION_IMAGE_PULL_SECRET
+              value: ghcr-creds
             - name: K8S_SESSION_CACHE_CLAIM
               value: app-web-session-cache
             - name: K8S_SESSION_HOME_CLAIM
