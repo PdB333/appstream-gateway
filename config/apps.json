@@ -134,14 +134,14 @@
   {
     "id": "lens",
     "name": "Lens Desktop",
-    "description": "Kubernetes IDE — requires manual AppImage install. See https://k8slens.dev/download",
+    "description": "Kubernetes IDE delivered as an Electron AppImage.",
     "featured": false,
-    "disabled": true,
     "categories": ["devops", "kubernetes"],
     "tags": ["electron", "k8s", "ide"],
     "source": {
-      "type": "appimage-file",
-      "path": "/opt/lens/Lens.AppImage"
+      "type": "appimage-url",
+      "url": "https://api.k8slens.dev/binaries/Lens-2026.3.251250-latest.x86_64.AppImage",
+      "sha256": ""
     },
     "launch": {
       "args": "--no-sandbox --disable-gpu --disable-dev-shm-usage --disable-gpu-sandbox",

@@ -267,6 +267,8 @@
             <label class="toggle"><input id="closeOnUnload" type="checkbox">Close with tab</label>
             <label class="toggle"><input id="confirmOnClose" type="checkbox">Warn on close</label>
             <div class="hud-sep"></div>
+            <button id="pasteFromHostButton" class="hud-btn" type="button">Paste host -> app</button>
+            <button id="copyToHostButton" class="hud-btn" type="button">Copy app -> host</button>
             <button id="fullscreenButton" class="hud-btn btn-accent" type="button">Fullscreen</button>
             <button id="closeAppButton" class="hud-btn btn-danger" type="button">Close app</button>
             <span class="shortcut-hint">Ctrl+Shift+H to hide</span>
@@ -296,6 +298,8 @@
         const confirmOnCloseInput = document.getElementById("confirmOnClose");
         const closeAppButton = document.getElementById("closeAppButton");
         const fullscreenButton = document.getElementById("fullscreenButton");
+        const pasteFromHostButton = document.getElementById("pasteFromHostButton");
+        const copyToHostButton = document.getElementById("copyToHostButton");
         const sessionMatch = window.location.pathname.match(/^\/sessions\/([a-z0-9]+)/);
         const sessionId = sessionMatch ? sessionMatch[1] : "";
         const sessionToken = new URL(window.location.href).searchParams.get("token") || "";
@@ -512,6 +516,28 @@
                 e.preventDefault();
                 e.stopImmediatePropagation();
                 fullscreenButton.click();
+                return;
+            }
+
+            // Clipboard shortcuts: leverage user gesture for browser clipboard APIs.
+            const clipboardShortcut = e.ctrlKey || e.metaKey;
+            const key = String(e.key || "").toLowerCase();
+            if (clipboardShortcut && key === "v") {
+                readHostClipboard().then((text) => {
+                    if (text) sendClipboardToSession(text);
+                }).catch(() => {});
+                return;
+            }
+            if (clipboardShortcut && key === "c") {
+                fetch(bridgeUrl("/clipboard"), { credentials: "same-origin" })
+                    .then((res) => (res.ok ? res.json() : null))
+                    .then((data) => {
+                        const text = data?.text || "";
+                        if (!text) return;
+                        pendingSessionClipboardText = text;
+                        return writeHostClipboard(text, true);
+                    })
+                    .catch(() => {});
             }
         }, true); // ← capture phase
 
@@ -575,6 +601,8 @@
         // ── Session bridge: file/URL forwarding, clipboard sync, file upload ──
         const dropOverlay = document.getElementById("dropOverlay");
         let lastClipboardText = "";
+        let pendingSessionClipboardText = "";
+        let clipboardWarningShown = false;
 
         function bridgeUrl(endpoint) {
             const base = sessionMatch ? `/sessions/${sessionId}/bridge` : "/bridge";
@@ -615,6 +643,58 @@
         }
 
         // ── Clipboard sync ──
+        function hasClipboardWriteApi() {
+            return Boolean(window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText);
+        }
+
+        function hasClipboardReadApi() {
+            return Boolean(window.isSecureContext && navigator.clipboard && navigator.clipboard.readText);
+        }
+
+        async function writeHostClipboard(text, fromGesture = false) {
+            if (typeof text !== "string") return false;
+            if (hasClipboardWriteApi()) {
+                try {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                } catch { }
+            }
+
+            // Fallback for user-gesture handlers when Clipboard API is blocked/unavailable.
+            if (fromGesture) {
+                const ta = document.createElement("textarea");
+                ta.value = text;
+                ta.setAttribute("readonly", "");
+                ta.style.position = "fixed";
+                ta.style.opacity = "0";
+                ta.style.left = "-9999px";
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                let copied = false;
+                try { copied = document.execCommand("copy"); } catch { copied = false; }
+                document.body.removeChild(ta);
+                return copied;
+            }
+
+            return false;
+        }
+
+        async function readHostClipboard() {
+            if (!hasClipboardReadApi()) return "";
+            try {
+                return await navigator.clipboard.readText();
+            } catch {
+                return "";
+            }
+        }
+
+        function maybeShowClipboardWarning() {
+            if (clipboardWarningShown) return;
+            clipboardWarningShown = true;
+            showToast("Clipboard access blocked by browser. Use 'Paste host -> app' / 'Copy app -> host'.");
+        }
+
         async function pollClipboard() {
             try {
                 const res = await fetch(bridgeUrl("/clipboard"), { credentials: "same-origin" });
@@ -622,20 +702,28 @@
                 const data = await res.json();
                 if (data.changed && data.text && data.text !== lastClipboardText) {
                     lastClipboardText = data.text;
-                    try { await navigator.clipboard.writeText(data.text); } catch { }
+                    pendingSessionClipboardText = data.text;
+                    const copied = await writeHostClipboard(data.text, false);
+                    if (!copied) maybeShowClipboardWarning();
                 }
             } catch { }
         }
 
         async function sendClipboardToSession(text) {
-            if (!text || text === lastClipboardText) return;
-            lastClipboardText = text;
+            if (typeof text !== "string" || text.length === 0 || text === lastClipboardText) return;
             try {
-                await fetch(bridgeUrl("/clipboard"), {
+                const res = await fetch(bridgeUrl("/clipboard"), {
                     method: "POST", credentials: "same-origin",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ text }),
                 });
+                if (!res.ok) return;
+                const data = await res.json().catch(() => ({}));
+                if (data.ok === false) {
+                    showToast("Failed to write clipboard in session.");
+                    return;
+                }
+                lastClipboardText = text;
             } catch { }
         }
 
@@ -645,10 +733,50 @@
         });
 
         window.addEventListener("focus", async () => {
-            try {
-                const text = await navigator.clipboard.readText();
-                if (text) sendClipboardToSession(text);
-            } catch { }
+            const text = await readHostClipboard();
+            if (text) sendClipboardToSession(text);
+        });
+
+        pasteFromHostButton.addEventListener("click", async () => {
+            const text = await readHostClipboard();
+            if (text) {
+                await sendClipboardToSession(text);
+                showToast("Clipboard sent to app.");
+                return;
+            }
+
+            const manual = window.prompt("Paste text to send to the app:", "");
+            if (!manual) {
+                showToast("Host clipboard unavailable or empty.");
+                return;
+            }
+            await sendClipboardToSession(manual);
+            showToast("Clipboard sent to app.");
+        });
+
+        copyToHostButton.addEventListener("click", async () => {
+            let text = pendingSessionClipboardText;
+            if (!text) {
+                try {
+                    const res = await fetch(bridgeUrl("/clipboard"), { credentials: "same-origin" });
+                    if (res.ok) {
+                        const data = await res.json();
+                        text = data.text || "";
+                    }
+                } catch { }
+            }
+            if (!text) {
+                showToast("Session clipboard is empty.");
+                return;
+            }
+            pendingSessionClipboardText = text;
+            const copied = await writeHostClipboard(text, true);
+            if (copied) {
+                showToast("Clipboard copied to host.");
+                return;
+            }
+            // Last resort fallback when browser blocks clipboard APIs.
+            window.prompt("Copy this text manually:", text);
         });
 
         // ── File upload (drag & drop) ──

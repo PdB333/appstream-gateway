@@ -21,9 +21,10 @@ mkdir -p "${PENDING_DIR}" "${FILES_DIR}"
 
 ITEM_ID="$(date +%s%N)-$$"
 
-# Detect if this is a URL or a file path
-if [[ "${TARGET}" =~ ^https?:// ]] || [[ "${TARGET}" =~ ^mailto: ]] || [[ "${TARGET}" =~ ^ftp:// ]]; then
-  # It's a URL - forward directly
+# Detect if this is a URI or a file path.
+# Accept generic URI schemes such as https:, mailto:, lens:, custom+scheme:.
+if [[ "${TARGET}" =~ ^[a-zA-Z][a-zA-Z0-9+.-]*: ]]; then
+  # It's a URI - forward directly
   cat > "${PENDING_DIR}/${ITEM_ID}.json" <<EOF
 {"id":"${ITEM_ID}","type":"url","url":"${TARGET}","ts":$(date +%s)}
 EOF

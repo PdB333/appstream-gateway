@@ -538,6 +538,7 @@
           <div class="muted">CPU: ${app.resources.cpuCores} | RAM: ${app.resources.memoryMb}MB | Resume: ${app.session.resume ? "yes" : "no"}</div>
           <div class="row">
             <button data-launch="${escapeHtml(app.id)}" ${launchLocked ? 'disabled title="Enter the admin token first"' : ""}>${app.session.resume ? "Open / Resume" : "Launch"}</button>
+            <a href="${escapeHtml(buildDirectAppLaunchUrl(app.id))}" target="_blank" rel="noreferrer">${app.session.resume ? "Direct resume link" : "Direct launch link"}</a>
           </div>
         `;
         catalogApps.appendChild(card);
@@ -644,6 +645,18 @@
       setActionNotice(`Launching ${appId}...`);
       // Refresh session list after a short delay to show the new session
       setTimeout(refreshData, 3000);
+    }
+
+    function buildDirectAppLaunchUrl(appId) {
+      const params = new URLSearchParams();
+      if (state.adminToken) {
+        params.set("adminToken", state.adminToken);
+      }
+      if (state.clientId) {
+        params.set("clientId", state.clientId);
+      }
+      const query = params.toString();
+      return `/app/${encodeURIComponent(appId)}${query ? `?${query}` : ""}`;
     }
 
     async function createSession(payload) {
