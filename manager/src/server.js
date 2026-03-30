@@ -830,7 +830,7 @@ function buildContainerSpec(session, app) {
     "appweb.app-id": app.id,
     "appweb.app-name": sanitizeLabel(app.name),
     "appweb.client-id": sanitizeLabel(session.clientId || ""),
-    "appweb.created-at": String(session.createdAt),
+    "appweb.created-at": sanitizeLabel(String(session.createdAt)),
     "appweb.storage-mode": session.storage.mode,
     "appweb.home-volume": sanitizeLabel(session.storage.homeVolumeName || ""),
     "appweb.source-type": app.source.type,
