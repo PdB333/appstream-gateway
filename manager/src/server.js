@@ -672,6 +672,15 @@ async function createSession(app, { clientId }) {
   return session;
 }
 
+function sanitizeLabel(value) {
+  // Kubernetes labels: alphanumeric, '-', '_', '.', max 63 chars, must start/end with alnum
+  return String(value || "")
+    .replace(/[^A-Za-z0-9._-]/g, "_")
+    .replace(/^[^A-Za-z0-9]+/, "")
+    .replace(/[^A-Za-z0-9]+$/, "")
+    .slice(0, 63);
+}
+
 function clampSessionDimension(value, min, max) {
   if (!Number.isFinite(value) || value <= 0) {
     return 0;
@@ -781,11 +790,11 @@ function buildContainerSpec(session, app) {
     "appweb.managed": "true",
     "appweb.session-id": session.id,
     "appweb.app-id": app.id,
-    "appweb.app-name": app.name,
-    "appweb.client-id": session.clientId || "",
-    "appweb.created-at": msToIso(session.createdAt),
+    "appweb.app-name": sanitizeLabel(app.name),
+    "appweb.client-id": sanitizeLabel(session.clientId || ""),
+    "appweb.created-at": String(session.createdAt),
     "appweb.storage-mode": session.storage.mode,
-    "appweb.home-volume": session.storage.homeVolumeName || "",
+    "appweb.home-volume": sanitizeLabel(session.storage.homeVolumeName || ""),
     "appweb.source-type": app.source.type,
   };
 
@@ -1023,7 +1032,7 @@ async function restoreSessions() {
       containerId: container.Id,
       containerName: (container.Names?.[0] || "").replace(/^\//, ""),
       runtimeHost: container.PodIP || (container.Names?.[0] || "").replace(/^\//, ""),
-      createdAt: labels["appweb.created-at"] ? Date.parse(labels["appweb.created-at"]) : now,
+      createdAt: labels["appweb.created-at"] ? Number(labels["appweb.created-at"]) || now : now,
       lastActivityAt: now,
       sessionTtlMs: config.defaultSessionTtlMs,
       status: container.State === "running" ? "starting" : container.State || "unknown",
@@ -1077,7 +1086,7 @@ async function restoreSessions() {
       lastState: null,
       lastStats: null,
       timings: {
-        createStartedAt: labels["appweb.created-at"] ? Date.parse(labels["appweb.created-at"]) : now,
+        createStartedAt: labels["appweb.created-at"] ? Number(labels["appweb.created-at"]) || now : now,
         readyAt: 0,
         launchDurationMs: 0,
         readinessProbeCount: 0,

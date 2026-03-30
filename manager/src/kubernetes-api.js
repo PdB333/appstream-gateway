@@ -47,12 +47,12 @@ export class KubernetesClient {
 
   async createContainer(name, body) {
     const manifest = {
+      ...body,
       metadata: {
         ...(body.metadata || {}),
         name,
         namespace: this.namespace,
       },
-      ...body,
     };
 
     const response = await this.request("POST", `/api/v1/namespaces/${this.namespace}/pods`, manifest);
