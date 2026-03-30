@@ -99,14 +99,22 @@ export class KubernetesClient {
 
   async getContainerLogs(containerId, options = {}) {
     const query = new URLSearchParams({
+      container: "session",
       timestamps: options.timestamps === false ? "false" : "true",
       tailLines: String(options.tail ?? 200),
     });
 
-    return this.requestText(
-      "GET",
-      `/api/v1/namespaces/${this.namespace}/pods/${containerId}/log?${query.toString()}`
-    );
+    try {
+      return await this.requestText(
+        "GET",
+        `/api/v1/namespaces/${this.namespace}/pods/${containerId}/log?${query.toString()}`
+      );
+    } catch (error) {
+      if (error instanceof DockerError && [400, 404].includes(error.statusCode)) {
+        return "";
+      }
+      throw error;
+    }
   }
 
   async getContainerStats(containerId) {
@@ -137,14 +145,16 @@ export class KubernetesClient {
   }
 
   request(method, requestPath, body) {
-    return this._request(method, requestPath, body, true);
+    return this._request(method, requestPath, body, "json");
   }
 
   requestText(method, requestPath, body) {
-    return this._request(method, requestPath, body, false);
+    return this._request(method, requestPath, body, "text");
   }
 
-  _request(method, requestPath, body, parseJson) {
+  _request(method, requestPath, body, mode) {
+    const parseJson = mode === "json";
+    const acceptHeader = mode === "text" ? "*/*" : "application/json";
     return new Promise((resolve, reject) => {
       const payload = body ? JSON.stringify(body) : null;
       const request = https.request(
@@ -154,7 +164,7 @@ export class KubernetesClient {
           agent: this.agent,
           headers: {
             Authorization: `Bearer ${this.token}`,
-            Accept: parseJson ? "application/json" : "text/plain",
+            Accept: acceptHeader,
             ...(payload
               ? {
                   "content-type": "application/json",
