@@ -9,7 +9,7 @@ Endpoints:
   GET  /ack/<id>      → Acknowledge (remove) a pending item
   GET  /clipboard     → Read the X11 clipboard (session → host)
   POST /clipboard     → Write to the X11 clipboard (host → session)
-  POST /upload        → Upload a file into the session home directory
+  POST /upload        → Upload a file into the session home directory (option: ?open=1)
   GET  /health        → Health check
 """
 
@@ -52,6 +52,13 @@ _forwarded_files = set()
 _forwarded_lock = threading.Lock()
 
 
+def parse_bool(value, default=False):
+    raw = str(value if value is not None else "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
 def read_x_clipboard():
     """Read text from the X11 clipboard using xclip or xsel."""
     for cmd in [
@@ -90,6 +97,36 @@ def write_x_clipboard(text):
             if result.returncode == 0:
                 return True
         except (FileNotFoundError, subprocess.TimeoutExpired):
+            continue
+    return False
+
+
+def open_file_in_session(filepath):
+    """Best-effort open of a file in the active desktop session."""
+    file_path = Path(filepath)
+    if not file_path.is_file():
+        return False
+
+    env = {**os.environ, "DISPLAY": DISPLAY}
+    # Try xdg-open first (desktop default handler), then gio open.
+    commands = [
+        ["xdg-open", str(file_path)],
+        ["gio", "open", str(file_path)],
+    ]
+    for cmd in commands:
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=env,
+            )
+            # Treat successful spawn as success; app-level failures are not always immediate.
+            if proc.pid:
+                return True
+        except FileNotFoundError:
+            continue
+        except Exception:
             continue
     return False
 
@@ -284,7 +321,13 @@ class BridgeHandler(BaseHTTPRequestHandler):
             self._json_response(404, {"error": "not found"})
 
     def do_POST(self):
-        path = unquote(self.path).split("?")[0].rstrip("/")
+        raw_path = unquote(self.path)
+        if "?" in raw_path:
+            path, query = raw_path.split("?", 1)
+        else:
+            path, query = raw_path, ""
+        path = path.rstrip("/")
+        qs = parse_qs(query)
 
         if path == "/clipboard":
             body = self._read_body(max_bytes=1 * 1024 * 1024)  # 1 MB max for clipboard
@@ -308,6 +351,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
             content_type = self.headers.get("Content-Type", "")
             filename = "upload"
             file_data = body
+            open_after_upload = parse_bool((qs.get("open", ["0"]) or ["0"])[0], default=False)
 
             if "multipart/form-data" in content_type:
                 # Simple multipart parsing
@@ -340,10 +384,14 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
             target = UPLOAD_DIR / filename
             target.write_bytes(file_data)
+            opened = False
+            if open_after_upload:
+                opened = open_file_in_session(target)
             self._json_response(200, {
                 "ok": True,
                 "path": str(target),
                 "size": len(file_data),
+                "opened": opened,
             })
 
         elif path.startswith("/ack/"):

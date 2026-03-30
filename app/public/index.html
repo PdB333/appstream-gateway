@@ -267,13 +267,15 @@
             <label class="toggle"><input id="closeOnUnload" type="checkbox">Close with tab</label>
             <label class="toggle"><input id="confirmOnClose" type="checkbox">Warn on close</label>
             <div class="hud-sep"></div>
+            <button id="openHostFileButton" class="hud-btn" type="button">Open local file</button>
             <button id="pasteFromHostButton" class="hud-btn" type="button">Paste host -> app</button>
             <button id="copyToHostButton" class="hud-btn" type="button">Copy app -> host</button>
             <button id="fullscreenButton" class="hud-btn btn-accent" type="button">Fullscreen</button>
             <button id="closeAppButton" class="hud-btn btn-danger" type="button">Close app</button>
-            <span class="shortcut-hint">Ctrl+Shift+H to hide</span>
+            <span class="shortcut-hint">Ctrl+O local file • Ctrl+Shift+H hide</span>
         </div>
     </div>
+    <input id="hostFileInput" type="file" multiple hidden>
 
     <script type="module" crossorigin="anonymous">
         import RFB from './core/rfb.js';
@@ -298,6 +300,8 @@
         const confirmOnCloseInput = document.getElementById("confirmOnClose");
         const closeAppButton = document.getElementById("closeAppButton");
         const fullscreenButton = document.getElementById("fullscreenButton");
+        const openHostFileButton = document.getElementById("openHostFileButton");
+        const hostFileInput = document.getElementById("hostFileInput");
         const pasteFromHostButton = document.getElementById("pasteFromHostButton");
         const copyToHostButton = document.getElementById("copyToHostButton");
         const sessionMatch = window.location.pathname.match(/^\/sessions\/([a-z0-9]+)/);
@@ -528,6 +532,12 @@
                 }).catch(() => {});
                 return;
             }
+            if (clipboardShortcut && key === "o") {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                openHostFilePicker();
+                return;
+            }
             if (clipboardShortcut && key === "c") {
                 fetch(bridgeUrl("/clipboard"), { credentials: "same-origin" })
                     .then((res) => (res.ok ? res.json() : null))
@@ -617,6 +627,40 @@
             el.textContent = msg;
             document.body.appendChild(el);
             setTimeout(() => el.remove(), 3000);
+        }
+
+        async function uploadAndOpenFiles(files) {
+            if (!files || files.length === 0) return;
+            for (const file of files) {
+                try {
+                    const fd = new FormData();
+                    fd.append("file", file, file.name);
+                    const uploadUrl = bridgeUrl("/upload");
+                    uploadUrl.searchParams.set("open", "1");
+                    const res = await fetch(uploadUrl, {
+                        method: "POST",
+                        credentials: "same-origin",
+                        body: fd,
+                    });
+                    if (!res.ok) {
+                        showToast(`Failed to upload ${file.name}`);
+                        continue;
+                    }
+                    const data = await res.json();
+                    const opened = Boolean(data.opened);
+                    showToast(
+                        opened
+                            ? `Uploaded and opened ${file.name}`
+                            : `Uploaded ${file.name}`
+                    );
+                } catch {
+                    showToast(`Failed to upload ${file.name}`);
+                }
+            }
+        }
+
+        function openHostFilePicker() {
+            hostFileInput.click();
         }
 
         // ── xdg-open bridge (poll pending items) ──
@@ -779,6 +823,15 @@
             window.prompt("Copy this text manually:", text);
         });
 
+        openHostFileButton.addEventListener("click", () => {
+            openHostFilePicker();
+        });
+
+        hostFileInput.addEventListener("change", async () => {
+            await uploadAndOpenFiles(hostFileInput.files);
+            hostFileInput.value = "";
+        });
+
         // ── File upload (drag & drop) ──
         let dragCounter = 0;
 
@@ -801,19 +854,7 @@
             dropOverlay.classList.remove("active");
             const files = e.dataTransfer?.files;
             if (!files || files.length === 0) return;
-            for (const file of files) {
-                try {
-                    const fd = new FormData();
-                    fd.append("file", file, file.name);
-                    const res = await fetch(bridgeUrl("/upload"), { method: "POST", credentials: "same-origin", body: fd });
-                    if (res.ok) {
-                        const data = await res.json();
-                        showToast(`Uploaded ${file.name} (${(data.size / 1024).toFixed(0)} KB)`);
-                    } else {
-                        showToast(`Failed to upload ${file.name}`);
-                    }
-                } catch { showToast(`Failed to upload ${file.name}`); }
-            }
+            await uploadAndOpenFiles(files);
         });
 
         // Start polling
