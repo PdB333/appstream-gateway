@@ -254,8 +254,12 @@ function normalizePodStatus(pod) {
   const running = containerState.running || {};
   const phase = pod.status?.phase || "Unknown";
 
+  const isPending = phase === "Pending";
+  const hasTerminated = Boolean(terminated.exitCode !== undefined || terminated.reason);
+
   return {
     Running: phase === "Running",
+    Pending: isPending && !hasTerminated,
     Status: phase.toLowerCase(),
     ExitCode: terminated.exitCode,
     OOMKilled: terminated.reason === "OOMKilled",

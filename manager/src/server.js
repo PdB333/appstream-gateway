@@ -1028,8 +1028,14 @@ async function waitForSessionReady(session, timeoutMs = config.sessionReadyTimeo
     const inspection = await runtimeClient.inspectContainer(session.containerId);
     syncSessionFromInspection(session, inspection);
 
-    if (!inspection.State?.Running) {
+    if (!inspection.State?.Running && !inspection.State?.Pending) {
       throw new Error(`Session container ${session.id} exited before becoming ready`);
+    }
+
+    // Still pending (e.g. ContainerCreating, image pull) — skip HTTP probe, just wait
+    if (inspection.State?.Pending) {
+      await sleep(1000);
+      continue;
     }
 
     try {
