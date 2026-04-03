@@ -628,8 +628,8 @@ exec "$@"
 INNEREOF
 chmod +x "${_PIXBUF_WRAPPER}"
 
-# If the command targets an AppRun inside an extracted AppImage, wrap it
-if echo "${APP_LAUNCH_COMMAND}" | grep -q "AppRun\|appimage-extract-and-run"; then
+# Disabled for extracted AppImages: wrapping AppRun changes $0 and breaks APPDIR detection.
+if false && echo "${APP_LAUNCH_COMMAND}" | grep -q "AppRun\|appimage-extract-and-run"; then
   APP_LAUNCH_COMMAND="${_PIXBUF_WRAPPER} ${APP_LAUNCH_COMMAND}"
 fi
 WRAPEOF
