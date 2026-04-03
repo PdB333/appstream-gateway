@@ -14,7 +14,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   curl \
   desktop-file-utils \
   dbus-x11 \
-  dillo \
   netsurf-gtk \
   fonts-dejavu-core \
   fonts-liberation \

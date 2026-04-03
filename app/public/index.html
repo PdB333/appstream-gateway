@@ -39,15 +39,17 @@
             height: 100vh;
             overflow: hidden;
             display: flex;
-            align-items: center;
-            justify-content: center;
+            align-items: stretch;
+            justify-content: stretch;
             background: #050505;
         }
 
         #display canvas {
             display: block;
-            max-width: 100%;
-            max-height: 100%;
+            width: 100% !important;
+            height: 100% !important;
+            max-width: none;
+            max-height: none;
             outline: none;
             background: #050505;
         }
@@ -253,13 +255,14 @@
     <div id="dropOverlay"><span>Drop files to upload into session</span></div>
 
     <!-- Floating toggle button (visible when HUD is hidden) -->
-    <button id="hudToggle" title="Toggle toolbar (Ctrl+Shift+H)">&#9776;</button>
+    <button id="hudToggle" title="Toggle toolbar (Ctrl+Alt+Shift+C)">&#9776;</button>
 
     <!-- HUD toolbar -->
     <div id="hud">
         <div class="hud-panel" id="statusPanel">
             <div id="statusDot" class="connecting"></div>
             <div id="status">Connecting...</div>
+            <button id="hideHudButton" class="hud-btn" type="button">Hide HUD</button>
         </div>
         <div class="hud-panel" id="controlsPanel">
             <label class="toggle"><input id="localCursor" type="checkbox">Local cursor</label>
@@ -272,7 +275,7 @@
             <button id="copyToHostButton" class="hud-btn" type="button">Copy app -> host</button>
             <button id="fullscreenButton" class="hud-btn btn-accent" type="button">Fullscreen</button>
             <button id="closeAppButton" class="hud-btn btn-danger" type="button">Close app</button>
-            <span class="shortcut-hint">Ctrl+O local file • Ctrl+Shift+H hide</span>
+            <span class="shortcut-hint">Ctrl+O local file • Ctrl+Alt+Shift+C hide</span>
         </div>
     </div>
     <input id="hostFileInput" type="file" multiple hidden>
@@ -295,6 +298,7 @@
         const statusDot = document.getElementById("statusDot");
         const hud = document.getElementById("hud");
         const hudToggle = document.getElementById("hudToggle");
+        const hideHudButton = document.getElementById("hideHudButton");
         const localCursorInput = document.getElementById("localCursor");
         const closeOnUnloadInput = document.getElementById("closeOnUnload");
         const confirmOnCloseInput = document.getElementById("confirmOnClose");
@@ -324,11 +328,13 @@
             localStorage.setItem(keys.hudVisible, visible ? "1" : "0");
             hud.classList.toggle("hud-hidden", !visible);
             hudToggle.classList.toggle("show-toggle", !visible);
+            hideHudButton.textContent = visible ? "Hide HUD" : "Show HUD";
         }
 
         setHudVisible(hudVisible);
 
         hudToggle.addEventListener("click", () => setHudVisible(!hudVisible));
+        hideHudButton.addEventListener("click", () => setHudVisible(!hudVisible));
 
         // Auto-hide HUD after 4s of inactivity (only when connected)
         let hudAutoHideTimer = 0;
@@ -516,8 +522,8 @@
         // ── Keyboard shortcuts ──
         // Capture at window level during capture phase so it fires BEFORE noVNC grabs the event
         window.addEventListener("keydown", (e) => {
-            // Ctrl+Shift+H = toggle HUD
-            if (e.ctrlKey && e.shiftKey && (e.key === "H" || e.key === "h")) {
+            // Ctrl+Alt+Shift+C = toggle HUD
+            if (e.ctrlKey && e.altKey && e.shiftKey && e.code === "KeyC") {
                 e.preventDefault();
                 e.stopImmediatePropagation();
                 setHudVisible(!hudVisible);
@@ -603,7 +609,7 @@
         rfb.addEventListener("desktopname", updateDesktopName);
 
         rfb.viewOnly = readBooleanQuery("view_only", false);
-        rfb.scaleViewport = readBooleanQuery("scale", true);
+        rfb.scaleViewport = readBooleanQuery("scale", false);
         rfb.clipViewport = readBooleanQuery("clip", false);
         rfb.resizeSession = readBooleanQuery("resize", true);
         rfb.qualityLevel = readNumberQuery("quality", 9);

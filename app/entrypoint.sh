@@ -3,7 +3,7 @@ set -euo pipefail
 
 APP_SESSION_ID="${APP_SESSION_ID:-unknown}"
 APP_USER="${APP_USER:-appuser}"
-SESSION_URL_BROWSER="${SESSION_URL_BROWSER:-netsurf-gtk3}"
+SESSION_URL_BROWSER="${SESSION_URL_BROWSER:-netsurf-gtk}"
 APP_NAME="${APP_NAME:-Remote App}"
 APP_SOURCE_TYPE="${APP_SOURCE_TYPE:-command}"
 APP_SOURCE_URL="${APP_SOURCE_URL:-}"
@@ -125,8 +125,6 @@ prepare_directories() {
     "${SESSION_HOME}" \
     "${SESSION_HOME}/.config" \
     "${SESSION_HOME}/.cache" \
-    "${SESSION_HOME}/.dillo" \
-    "${SESSION_HOME}/.dillo/dpi" \
     "${SESSION_HOME}/.local/share" \
     "${SESSION_HOME}/.local/share/applications" \
     "${SESSION_HOME}/.pki/nssdb" \
@@ -147,15 +145,6 @@ prepare_directories() {
   chmod 1777 /dev/shm 2>/dev/null || true
 
   chown -R "${APP_USER}:${APP_USER}" "${APP_CACHE_DIR}" "${DATA_DIR}" "${XDG_RUNTIME_DIR}" "${SESSION_HOME}"
-
-  local dillo_dpi_dir=""
-  dillo_dpi_dir="$(find /usr/lib -path '*/dillo/dpi' -type d 2>/dev/null | head -1)"
-  if [[ -n "${dillo_dpi_dir}" ]]; then
-    if [[ ! -f "${SESSION_HOME}/.dillo/dpi_socket_dir" ]]; then
-      printf '%s\n' "${SESSION_HOME}/.dillo/dpi" > "${SESSION_HOME}/.dillo/dpi_socket_dir"
-    fi
-    chown -R "${APP_USER}:${APP_USER}" "${SESSION_HOME}/.dillo" 2>/dev/null || true
-  fi
 
   # Rebuild GDK pixbuf cache at runtime into a writable location
   # (ReadonlyRootfs means the default cache path is not writable)
@@ -846,26 +835,6 @@ start_dbus() {
   fi
 }
 
-start_dillo_daemon() {
-  local dpid_path=""
-
-  for dpid_path in /usr/libexec/dillo/dpid /usr/lib/dillo/dpid; do
-    if [[ -x "${dpid_path}" ]]; then
-      emit_log "info" "dillo_daemon_start" "Starting Dillo daemon"
-      runuser -u "${APP_USER}" -- env \
-        DISPLAY="${DISPLAY}" \
-        HOME="${SESSION_HOME}" \
-        XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
-        "${dpid_path}" >>"${LOG_DIR}/app.log" 2>&1 &
-      pids+=("$!")
-      sleep 0.5
-      return 0
-    fi
-  done
-
-  return 1
-}
-
 start_application() {
   emit_log "info" "app_launch" "Launching ${APP_NAME}"
   runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" dbus-run-session -- /bin/bash /tmp/start-app.sh >>"${LOG_DIR}/app.log" 2>&1 &
@@ -894,7 +863,6 @@ main() {
   start_file_bridge
   wait_for_port 127.0.0.1 "${FILE_BRIDGE_PORT}"
   start_dbus
-  start_dillo_daemon || true
   start_application
 
   emit_log "info" "session_ready" "Session services are ready"

@@ -22,27 +22,6 @@ mkdir -p "${PENDING_DIR}" "${FILES_DIR}"
 
 ITEM_ID="$(date +%s%N)-$$"
 
-ensure_dillo_daemon() {
-  local daemon_path=""
-
-  for daemon_path in dpid /usr/libexec/dillo/dpid /usr/lib/dillo/dpid; do
-    if command -v "${daemon_path}" >/dev/null 2>&1 || [[ -x "${daemon_path}" ]]; then
-      if ! pgrep -x dpid >/dev/null 2>&1; then
-        nohup "${daemon_path}" >/dev/null 2>&1 &
-        for _ in {1..20}; do
-          if pgrep -x dpid >/dev/null 2>&1; then
-            break
-          fi
-          sleep 0.1
-        done
-      fi
-      return 0
-    fi
-  done
-
-  return 1
-}
-
 open_in_session_browser() {
   local url=$1
   local candidate
@@ -51,13 +30,10 @@ open_in_session_browser() {
   if [[ -n "${SESSION_BROWSER}" ]]; then
     browsers+=("${SESSION_BROWSER}")
   fi
-  browsers+=(netsurf-gtk3 netsurf-gtk netsurf dillo firefox brave-browser chromium chromium-browser epiphany)
+  browsers+=(netsurf-gtk3 netsurf-gtk netsurf firefox brave-browser chromium chromium-browser epiphany)
 
   for candidate in "${browsers[@]}"; do
     if command -v "${candidate}" >/dev/null 2>&1; then
-      if [[ "${candidate}" == "dillo" ]]; then
-        ensure_dillo_daemon
-      fi
       nohup "${candidate}" "${url}" >/dev/null 2>&1 &
       return 0
     fi

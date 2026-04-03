@@ -100,38 +100,6 @@ data:
         }
       },
       {
-        "id": "dillo",
-        "name": "Dillo (Light Browser)",
-        "description": "Ultra-lightweight fallback web browser for simple pages and emergency access.",
-        "categories": ["internet", "browser", "utility"],
-        "tags": ["browser", "lightweight", "fallback"],
-        "source": {
-          "type": "command",
-          "command": "dillo"
-        },
-        "launch": {
-          "args": "",
-          "extractAndRun": false,
-          "workingDirectory": "/data/home",
-          "healthcheckPath": "/"
-        },
-        "resources": {
-          "cpuCores": 0.25,
-          "memoryMb": 256
-        },
-        "display": {
-          "width": 1280,
-          "height": 800,
-          "depth": 24
-        },
-        "storage": {
-          "mode": "per-client"
-        },
-        "session": {
-          "resume": true
-        }
-      },
-      {
         "id": "lens",
         "name": "Lens Desktop",
         "description": "Kubernetes IDE delivered as an Electron AppImage.",
