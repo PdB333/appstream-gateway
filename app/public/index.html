@@ -283,7 +283,7 @@
         let resizeInFlight = false;
         let pendingResize = null;
         let lastResizeSent = "";
-        const remoteSessionResizeEnabled = readBooleanQuery("session_resize", true);
+        const remoteSessionResizeEnabled = readBooleanQuery("session_resize", false);
         let suppressCloseOnUnload = false;
         let sessionClosing = false;
 
@@ -612,7 +612,7 @@
         rfb.addEventListener("desktopname", updateDesktopName);
 
         rfb.viewOnly = readBooleanQuery("view_only", false);
-        rfb.scaleViewport = readBooleanQuery("scale", false);
+        rfb.scaleViewport = readBooleanQuery("scale", true);
         rfb.clipViewport = readBooleanQuery("clip", false);
         rfb.resizeSession = readBooleanQuery("resize", false);
         rfb.qualityLevel = readNumberQuery("quality", 9);
