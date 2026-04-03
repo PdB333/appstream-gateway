@@ -11,6 +11,11 @@ import { DockerClient, DockerError } from "./docker-api.js";
 import { KubernetesClient } from "./kubernetes-api.js";
 import { createEventStore, createLogger } from "./logger.js";
 import {
+  createSessionTimings,
+  finalizeSessionTimings,
+  noteSessionInspection,
+} from "./session-timings.js";
+import {
   buildBaseUrl,
   computeExpiry,
   createSessionId,
@@ -643,11 +648,7 @@ async function createSession(app, { clientId }) {
     lastState: null,
     lastStats: null,
     timings: {
-      createStartedAt: now,
-      readyAt: 0,
-      launchDurationMs: 0,
-      readinessProbeCount: 0,
-      lastProbeAt: 0,
+      ...createSessionTimings(now),
     },
   };
 
@@ -670,13 +671,14 @@ async function createSession(app, { clientId }) {
 
     await waitForSessionReady(session);
     session.status = "ready";
-    session.timings.readyAt = Date.now();
-    session.timings.launchDurationMs = session.timings.readyAt - session.timings.createStartedAt;
+    finalizeSessionTimings(session.timings, Date.now());
     metrics.launchDurationMsSum += session.timings.launchDurationMs;
     metrics.launchDurationMsCount += 1;
     recordSessionEvent(session, "info", "session_ready", "Session became ready", {
       launchDurationMs: session.timings.launchDurationMs,
       readinessProbeCount: session.timings.readinessProbeCount,
+      pendingDurationMs: session.timings.pendingDurationMs,
+      runningDurationMs: session.timings.runningDurationMs,
     });
   } catch (error) {
     metrics.sessionsFailedTotal += 1;
@@ -1026,10 +1028,10 @@ async function waitForSessionReady(session, timeoutMs = config.sessionReadyTimeo
   const probePath = session.app.launch?.healthcheckPath || "/";
 
   while (Date.now() - startedAt < timeoutMs) {
-    session.timings.readinessProbeCount += 1;
-    session.timings.lastProbeAt = Date.now();
+    const probeAt = Date.now();
 
     const inspection = await runtimeClient.inspectContainer(session.containerId);
+    noteSessionInspection(session.timings, inspection, probeAt);
     syncSessionFromInspection(session, inspection);
 
     if (!inspection.State?.Running && !inspection.State?.Pending) {
@@ -1044,7 +1046,11 @@ async function waitForSessionReady(session, timeoutMs = config.sessionReadyTimeo
 
     try {
       const statusCode = await probeHttp(session.runtimeHost || session.containerName, config.sessionInternalPort, probePath);
-      if (statusCode >= 200 && statusCode < 500) {
+      const bridgeReady = await probeTcp(
+        session.runtimeHost || session.containerName,
+        config.sessionBridgePort
+      );
+      if (statusCode >= 200 && statusCode < 500 && bridgeReady) {
         return;
       }
     } catch {
@@ -1132,14 +1138,10 @@ async function restoreSessions() {
       lastError: "",
       lastState: null,
       lastStats: null,
-      timings: {
-        createStartedAt: labels["appweb.created-at"] ? Number(labels["appweb.created-at"]) || now : now,
-        readyAt: 0,
-        launchDurationMs: 0,
-        readinessProbeCount: 0,
-        lastProbeAt: 0,
-      },
-    };
+        timings: {
+          ...createSessionTimings(labels["appweb.created-at"] ? Number(labels["appweb.created-at"]) || now : now),
+        },
+      };
 
     sessions.set(sessionId, session);
     recordSessionEvent(session, "info", "session_restored", "Session restored from runtime state", {
@@ -1337,6 +1339,8 @@ function serializeSession(session, request, extra = {}) {
     expiresAt: msToIso(computeExpiry(session.lastActivityAt, session.sessionTtlMs)),
     url: `${baseUrl}/sessions/${session.id}/?token=${encodeURIComponent(accessToken)}`,
     launchDurationMs,
+    pendingDurationMs: session.timings.pendingDurationMs,
+    runningDurationMs: session.timings.runningDurationMs,
     storage: session.storage,
     reusedCount: session.reusedCount,
     lastError: session.lastError,
@@ -1388,10 +1392,12 @@ async function buildSessionDiagnostics(session, url) {
       createdAt: msToIso(session.createdAt),
       lastActivityAt: msToIso(session.lastActivityAt),
       sessionTtlMs: session.sessionTtlMs,
-      launchDurationMs: session.timings.launchDurationMs,
-      readinessProbeCount: session.timings.readinessProbeCount,
-      lastError: session.lastError,
-      reusedCount: session.reusedCount,
+        launchDurationMs: session.timings.launchDurationMs,
+        readinessProbeCount: session.timings.readinessProbeCount,
+        pendingDurationMs: session.timings.pendingDurationMs,
+        runningDurationMs: session.timings.runningDurationMs,
+        lastError: session.lastError,
+        reusedCount: session.reusedCount,
     },
     app: serializeCatalogApp(session.app),
     runtime: {
@@ -1708,6 +1714,27 @@ async function probeHttp(hostname, port, targetPath) {
     });
     request.on("error", reject);
     request.end();
+  });
+}
+
+async function probeTcp(hostname, port) {
+  return new Promise((resolve) => {
+    const socket = net.connect(port, hostname);
+    let settled = false;
+
+    const finish = (result) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      socket.destroy();
+      resolve(result);
+    };
+
+    socket.setTimeout(1000);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
   });
 }
 

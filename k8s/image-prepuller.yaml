@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: app-web-image-prepuller
+  namespace: app-web
+  labels:
+    app.kubernetes.io/name: app-web-image-prepuller
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: app-web-image-prepuller
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: app-web-image-prepuller
+    spec:
+      imagePullSecrets:
+        - name: ghcr-creds
+      initContainers:
+        - name: pull-session-image
+          image: ghcr.io/pdb333/appstream-gateway-session:20260403-369d143
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-lc", "true"]
+        - name: pull-manager-image
+          image: ghcr.io/pdb333/appstream-gateway-manager:20260403-369d143
+          imagePullPolicy: IfNotPresent
+          command: ["node", "-e", "process.exit(0)"]
+      containers:
+        - name: hold
+          image: registry.k8s.io/pause:3.10

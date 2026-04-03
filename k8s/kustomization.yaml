@@ -9,5 +9,6 @@ resources:
   - pvc.yaml
   - service.yaml
   - deployment.yaml
+  - image-prepuller.yaml
   - ingress.yaml
   - networkpolicy.yaml

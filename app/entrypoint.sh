@@ -36,6 +36,10 @@ X11VNC_NOXDAMAGE="${X11VNC_NOXDAMAGE:-1}"
 XVFB_MAX_WIDTH="${XVFB_MAX_WIDTH:-3840}"
 XVFB_MAX_HEIGHT="${XVFB_MAX_HEIGHT:-2160}"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/appimage-launch.sh
+source "${SCRIPT_DIR}/lib/appimage-launch.sh"
+
 declare -a pids=()
 app_pid=""
 RESOLVED_COMMAND=""
@@ -367,22 +371,21 @@ download_artifact() {
 
 prepare_appimage() {
   local appimage_path=$1
-  local staged_path
+  local staged_path extract_dir
 
-  staged_path="${APP_DOWNLOAD_DIR}/$(basename "${appimage_path}")"
+  resolve_appimage_launch_spec \
+    "${APP_CACHE_DIR}" \
+    "${APP_DOWNLOAD_DIR}" \
+    "${appimage_path}" \
+    "${APPIMAGE_EXTRACT_AND_RUN}" \
+    "${APP_ARGS}" \
+    "${APP_WORKDIR}"
+
+  staged_path="${APPIMAGE_STAGED_PATH}"
+  extract_dir="${APPIMAGE_EXTRACT_DIR}"
 
   if [[ ! -f "${appimage_path}" ]]; then
     emit_log "error" "appimage_source_missing" "Source AppImage not found: ${appimage_path}"
-    return 1
-  fi
-
-  cp -f "${appimage_path}" "${staged_path}"
-  chmod 0755 "${staged_path}"
-  chown "${APP_USER}:${APP_USER}" "${staged_path}" 2>/dev/null || true
-
-  # Verify the staged file is executable
-  if [[ ! -x "${staged_path}" ]]; then
-    emit_log "error" "appimage_not_executable" "Staged AppImage is not executable: ${staged_path}"
     return 1
   fi
 
@@ -390,7 +393,25 @@ prepare_appimage() {
   # This avoids the AppImage runtime overriding LD_LIBRARY_PATH at launch,
   # which breaks system GTK pixbuf loaders and causes file dialog crashes.
   if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" ]]; then
-    local extract_dir="${APP_DOWNLOAD_DIR}/squashfs-root-$(basename "${appimage_path}" .AppImage)"
+    mkdir -p "$(dirname "${extract_dir}")"
+
+    if [[ -x "${extract_dir}/AppRun" ]]; then
+      emit_log "info" "appimage_extract_cache_hit" "Using extracted AppImage cache at ${extract_dir}"
+      printf '%s' "${extract_dir}"
+      return 0
+    fi
+
+    if [[ ! -f "${staged_path}" ]]; then
+      cp -f "${appimage_path}" "${staged_path}"
+    fi
+    chmod 0755 "${staged_path}"
+    chown "${APP_USER}:${APP_USER}" "${staged_path}" 2>/dev/null || true
+
+    if [[ ! -x "${staged_path}" ]]; then
+      emit_log "error" "appimage_not_executable" "Staged AppImage is not executable: ${staged_path}"
+      return 1
+    fi
+
     if [[ ! -d "${extract_dir}" ]]; then
       emit_log "info" "appimage_extract" "Pre-extracting AppImage to ${extract_dir}"
       local extract_tmp="${APP_DOWNLOAD_DIR}/.extract-tmp-$$"
@@ -409,9 +430,18 @@ prepare_appimage() {
         return 0
       fi
     fi
-    # Return the extracted AppRun path instead of the AppImage
+
     printf '%s' "${extract_dir}"
     return 0
+  fi
+
+  cp -f "${appimage_path}" "${staged_path}"
+  chmod 0755 "${staged_path}"
+  chown "${APP_USER}:${APP_USER}" "${staged_path}" 2>/dev/null || true
+
+  if [[ ! -x "${staged_path}" ]]; then
+    emit_log "error" "appimage_not_executable" "Staged AppImage is not executable: ${staged_path}"
+    return 1
   fi
 
   emit_log "info" "appimage_staged" "AppImage staged at ${staged_path} ($(stat -c%s "${staged_path}" 2>/dev/null || echo '?') bytes)"
@@ -481,9 +511,8 @@ resolve_launch_spec() {
       fi
       artifact_path="$(prepare_appimage "${APP_SOURCE_PATH}")"
       if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" && -d "${artifact_path}" ]]; then
-        # Pre-extracted: run AppRun directly with our clean environment
-        printf -v quoted_path '%q' "${artifact_path}/AppRun"
-        RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
+        RESOLVED_WORKDIR="${artifact_path}"
+        RESOLVED_COMMAND="./AppRun ${APP_ARGS}"
       else
         printf -v quoted_path '%q' "${artifact_path}"
         RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
@@ -497,9 +526,8 @@ resolve_launch_spec() {
       artifact_path="$(download_artifact "${APP_SOURCE_URL}" "${APP_SHA256}" ".AppImage")"
       artifact_path="$(prepare_appimage "${artifact_path}")"
       if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" && -d "${artifact_path}" ]]; then
-        # Pre-extracted: run AppRun directly with our clean environment
-        printf -v quoted_path '%q' "${artifact_path}/AppRun"
-        RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
+        RESOLVED_WORKDIR="${artifact_path}"
+        RESOLVED_COMMAND="./AppRun ${APP_ARGS}"
       else
         printf -v quoted_path '%q' "${artifact_path}"
         RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
@@ -829,6 +857,7 @@ main() {
   start_websockify
   wait_for_port 127.0.0.1 "${PORT}"
   start_file_bridge
+  wait_for_port 127.0.0.1 "${FILE_BRIDGE_PORT}"
   start_dbus
   start_application
 
