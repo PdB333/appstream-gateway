@@ -30,7 +30,7 @@ open_in_session_browser() {
   if [[ -n "${SESSION_BROWSER}" ]]; then
     browsers+=("${SESSION_BROWSER}")
   fi
-  browsers+=(netsurf-gtk netsurf dillo firefox brave-browser chromium chromium-browser epiphany)
+  browsers+=(netsurf-gtk3 netsurf-gtk netsurf dillo firefox brave-browser chromium chromium-browser epiphany)
 
   for candidate in "${browsers[@]}"; do
     if command -v "${candidate}" >/dev/null 2>&1; then

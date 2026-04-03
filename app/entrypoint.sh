@@ -3,7 +3,7 @@ set -euo pipefail
 
 APP_SESSION_ID="${APP_SESSION_ID:-unknown}"
 APP_USER="${APP_USER:-appuser}"
-SESSION_URL_BROWSER="${SESSION_URL_BROWSER:-netsurf-gtk}"
+SESSION_URL_BROWSER="${SESSION_URL_BROWSER:-netsurf-gtk3}"
 APP_NAME="${APP_NAME:-Remote App}"
 APP_SOURCE_TYPE="${APP_SOURCE_TYPE:-command}"
 APP_SOURCE_URL="${APP_SOURCE_URL:-}"
