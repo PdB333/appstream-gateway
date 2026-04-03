@@ -835,6 +835,26 @@ start_dbus() {
   fi
 }
 
+start_dillo_daemon() {
+  local dpid_path=""
+
+  for dpid_path in /usr/libexec/dillo/dpid /usr/lib/dillo/dpid; do
+    if [[ -x "${dpid_path}" ]]; then
+      emit_log "info" "dillo_daemon_start" "Starting Dillo daemon"
+      runuser -u "${APP_USER}" -- env \
+        DISPLAY="${DISPLAY}" \
+        HOME="${SESSION_HOME}" \
+        XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+        "${dpid_path}" >>"${LOG_DIR}/app.log" 2>&1 &
+      pids+=("$!")
+      sleep 0.5
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 start_application() {
   emit_log "info" "app_launch" "Launching ${APP_NAME}"
   runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" dbus-run-session -- /bin/bash /tmp/start-app.sh >>"${LOG_DIR}/app.log" 2>&1 &
@@ -863,6 +883,7 @@ main() {
   start_file_bridge
   wait_for_port 127.0.0.1 "${FILE_BRIDGE_PORT}"
   start_dbus
+  start_dillo_daemon || true
   start_application
 
   emit_log "info" "session_ready" "Session services are ready"
