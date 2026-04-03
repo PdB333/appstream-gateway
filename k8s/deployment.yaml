@@ -35,7 +35,7 @@ spec:
             - name: SESSION_BACKEND
               value: kubernetes
             - name: SESSION_IMAGE
-              value: ghcr.io/pdb333/appstream-gateway-session:20260403-fa0aeca
+              value: ghcr.io/pdb333/appstream-gateway-session:20260403-1b4aefa
             - name: K8S_NAMESPACE
               valueFrom:
                 fieldRef:
