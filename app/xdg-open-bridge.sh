@@ -30,13 +30,10 @@ open_in_session_browser() {
   if [[ -n "${SESSION_BROWSER}" ]]; then
     browsers+=("${SESSION_BROWSER}")
   fi
-  browsers+=(dillo firefox brave-browser chromium chromium-browser epiphany)
+  browsers+=(netsurf-gtk netsurf dillo firefox brave-browser chromium chromium-browser epiphany)
 
   for candidate in "${browsers[@]}"; do
     if command -v "${candidate}" >/dev/null 2>&1; then
-      if [[ "${candidate}" == "dillo" ]] && command -v dpid >/dev/null 2>&1; then
-        pgrep -x dpid >/dev/null 2>&1 || nohup dpid >/dev/null 2>&1 &
-      fi
       nohup "${candidate}" "${url}" >/dev/null 2>&1 &
       return 0
     fi
