@@ -6,7 +6,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: app-web.example.com
+    - host: app-web.selatincankaraborklu.fr
       http:
         paths:
           - path: /

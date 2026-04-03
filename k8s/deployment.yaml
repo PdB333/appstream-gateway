@@ -20,7 +20,7 @@ spec:
         - name: ghcr-creds
       containers:
         - name: manager
-          image: ghcr.io/pdb333/appstream-gateway-manager:latest
+          image: ghcr.io/pdb333/appstream-gateway-manager:20260403-369d143
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
@@ -29,13 +29,13 @@ spec:
             - name: PORT
               value: "3000"
             - name: PUBLIC_BASE_URL
-              value: "https://app-web.example.com"
+              value: "https://app-web.selatincankaraborklu.fr"
             - name: APP_CATALOG_PATH
               value: /app/config/apps.json
             - name: SESSION_BACKEND
               value: kubernetes
             - name: SESSION_IMAGE
-              value: ghcr.io/pdb333/appstream-gateway-session:latest
+              value: ghcr.io/pdb333/appstream-gateway-session:20260403-369d143
             - name: K8S_NAMESPACE
               valueFrom:
                 fieldRef:
@@ -51,13 +51,13 @@ spec:
             - name: K8S_SESSION_HOME_CLAIM
               value: app-web-session-home
             - name: ALLOW_CUSTOM_APPS
-              value: "false"
+              value: "true"
             - name: SECURE_COOKIES
               value: "true"
             - name: DEFAULT_SESSION_TTL
               value: 2h
             - name: SESSION_READY_TIMEOUT
-              value: 5m
+              value: 90s
             - name: REAPER_INTERVAL
               value: 30s
             - name: SESSION_LOG_TAIL
