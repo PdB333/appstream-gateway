@@ -3,6 +3,7 @@ set -euo pipefail
 
 APP_SESSION_ID="${APP_SESSION_ID:-unknown}"
 APP_USER="${APP_USER:-appuser}"
+SESSION_URL_BROWSER="${SESSION_URL_BROWSER:-dillo}"
 APP_NAME="${APP_NAME:-Remote App}"
 APP_SOURCE_TYPE="${APP_SOURCE_TYPE:-command}"
 APP_SOURCE_URL="${APP_SOURCE_URL:-}"
@@ -585,6 +586,7 @@ export QT_AUTO_SCREEN_SCALE_FACTOR=\${QT_AUTO_SCREEN_SCALE_FACTOR:-0}
 export QT_SCALE_FACTOR=\${QT_SCALE_FACTOR:-1}
 export XCURSOR_SIZE=\${XCURSOR_SIZE:-24}
 export GTK_THEME=\${GTK_THEME:-Adwaita}
+export SESSION_URL_BROWSER="${SESSION_URL_BROWSER}"
 # Force GDK pixbuf loader paths — critical for GTK file dialogs in Electron/AppImage apps.
 # Discover paths dynamically (works across architectures).
 _PB_DIR=\$(find /usr/lib -path '*/gdk-pixbuf-2.0/*/loaders' -type d 2>/dev/null | head -1)
