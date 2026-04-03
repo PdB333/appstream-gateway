@@ -22,6 +22,13 @@ mkdir -p "${PENDING_DIR}" "${FILES_DIR}"
 
 ITEM_ID="$(date +%s%N)-$$"
 
+ensure_dillo_daemon() {
+  if command -v dpid >/dev/null 2>&1 && ! pgrep -x dpid >/dev/null 2>&1; then
+    nohup dpid >/dev/null 2>&1 &
+    sleep 0.2
+  fi
+}
+
 open_in_session_browser() {
   local url=$1
   local candidate
@@ -34,6 +41,9 @@ open_in_session_browser() {
 
   for candidate in "${browsers[@]}"; do
     if command -v "${candidate}" >/dev/null 2>&1; then
+      if [[ "${candidate}" == "dillo" ]]; then
+        ensure_dillo_daemon
+      fi
       nohup "${candidate}" "${url}" >/dev/null 2>&1 &
       return 0
     fi
