@@ -38,18 +38,11 @@
             width: 100vw;
             height: 100vh;
             overflow: hidden;
-            display: flex;
-            align-items: stretch;
-            justify-content: stretch;
             background: #050505;
         }
 
         #display canvas {
             display: block;
-            width: 100% !important;
-            height: 100% !important;
-            max-width: none;
-            max-height: none;
             outline: none;
             background: #050505;
         }
@@ -290,6 +283,7 @@
         let resizeInFlight = false;
         let pendingResize = null;
         let lastResizeSent = "";
+        const remoteSessionResizeEnabled = readBooleanQuery("session_resize", false);
         let suppressCloseOnUnload = false;
         let sessionClosing = false;
 
@@ -485,9 +479,11 @@
             const label = desktopName ? `Connected — ${desktopName}` : "Connected";
             setStatus(label, "connected", true);
             focusCanvas();
-            queueSessionResize(undefined, undefined, true);
-            setTimeout(() => queueSessionResize(), 300);
-            setTimeout(() => queueSessionResize(), 1000);
+            if (remoteSessionResizeEnabled) {
+                queueSessionResize(undefined, undefined, true);
+                setTimeout(() => queueSessionResize(), 300);
+                setTimeout(() => queueSessionResize(), 1000);
+            }
         }
 
         function disconnectedFromServer() {
@@ -516,7 +512,9 @@
 
         document.addEventListener("fullscreenchange", () => {
             fullscreenButton.textContent = document.fullscreenElement ? "Exit Fullscreen" : "Fullscreen";
-            setTimeout(() => queueSessionResize(undefined, undefined, true), 200);
+            if (remoteSessionResizeEnabled) {
+                setTimeout(() => queueSessionResize(undefined, undefined, true), 200);
+            }
         });
 
         // ── Keyboard shortcuts ──
@@ -574,8 +572,13 @@
         });
 
         // ── Window events ──
-        window.addEventListener("resize", () => { focusCanvas(); queueSessionResize(); }, { passive: true });
-        window.addEventListener("orientationchange", () => queueSessionResize());
+        window.addEventListener("resize", () => {
+            focusCanvas();
+            if (remoteSessionResizeEnabled) queueSessionResize();
+        }, { passive: true });
+        window.addEventListener("orientationchange", () => {
+            if (remoteSessionResizeEnabled) queueSessionResize();
+        });
 
         window.addEventListener("beforeunload", (event) => {
             if (suppressCloseOnUnload) return;
@@ -609,9 +612,9 @@
         rfb.addEventListener("desktopname", updateDesktopName);
 
         rfb.viewOnly = readBooleanQuery("view_only", false);
-        rfb.scaleViewport = readBooleanQuery("scale", false);
+        rfb.scaleViewport = readBooleanQuery("scale", true);
         rfb.clipViewport = readBooleanQuery("clip", false);
-        rfb.resizeSession = readBooleanQuery("resize", true);
+        rfb.resizeSession = readBooleanQuery("resize", false);
         rfb.qualityLevel = readNumberQuery("quality", 9);
         rfb.compressionLevel = readNumberQuery("compression", 1);
         rfb.showDotCursor = false;

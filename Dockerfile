@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   curl \
   desktop-file-utils \
   dbus-x11 \
+  falkon \
   epiphany-browser \
   netsurf-gtk \
   fonts-dejavu-core \
