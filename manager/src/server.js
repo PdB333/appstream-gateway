@@ -738,8 +738,8 @@ function normalizeSessionCloseReason(reason) {
 }
 
 async function resizeSessionRuntime(session, { width, height, depth }) {
-  if (config.sessionBackend !== "docker") {
-    const error = new Error("Live resize is only supported with the Docker backend");
+  if (typeof runtimeClient.execInContainer !== "function") {
+    const error = new Error("Live resize is not available for the current session backend");
     error.statusCode = 501;
     throw error;
   }
@@ -800,6 +800,9 @@ async function resizeSessionRuntime(session, { width, height, depth }) {
       height,
       depth,
     });
+    const resizeError = new Error(`Live resize failed: ${error.message}`);
+    resizeError.statusCode = error.statusCode || 502;
+    throw resizeError;
   }
 }
 

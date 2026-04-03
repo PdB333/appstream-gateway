@@ -5,6 +5,10 @@ ENV PORT=3000
 
 WORKDIR /app
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends kubernetes-client \
+  && rm -rf /var/lib/apt/lists/*
+
 COPY package.json /app/package.json
 COPY src /app/src
 COPY public /app/public

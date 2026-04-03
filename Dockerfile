@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   curl \
   desktop-file-utils \
   dbus-x11 \
+  dillo \
   fonts-dejavu-core \
   fonts-liberation \
   fonts-noto-color-emoji \

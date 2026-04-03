@@ -440,7 +440,15 @@
             if (!sessionId) return;
             const key = `${width}x${height}`;
             if (key === lastResizeSent) return;
-            await fetch(sessionControlUrl("resize", { width, height }), { method: "POST", credentials: "same-origin" });
+            const response = await fetch(sessionControlUrl("resize", { width, height }), {
+                method: "POST",
+                credentials: "same-origin",
+            });
+            if (!response.ok) {
+                const payload = await response.json().catch(() => null);
+                const error = payload?.error || `Resize request failed (${response.status})`;
+                throw new Error(error);
+            }
             lastResizeSent = key;
         }
 
@@ -597,7 +605,7 @@
         rfb.viewOnly = readBooleanQuery("view_only", false);
         rfb.scaleViewport = readBooleanQuery("scale", true);
         rfb.clipViewport = readBooleanQuery("clip", false);
-        rfb.resizeSession = false;
+        rfb.resizeSession = readBooleanQuery("resize", true);
         rfb.qualityLevel = readNumberQuery("quality", 9);
         rfb.compressionLevel = readNumberQuery("compression", 1);
         rfb.showDotCursor = false;

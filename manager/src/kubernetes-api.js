@@ -1,4 +1,5 @@
 import https from "node:https";
+import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 
 import { DockerError } from "./docker-api.js";
@@ -145,6 +146,28 @@ export class KubernetesClient {
       }
       throw error;
     }
+  }
+
+  async execInContainer(containerId, command, options = {}) {
+    if (!Array.isArray(command) || command.length === 0) {
+      throw new DockerError("Command is required for container exec", 400);
+    }
+
+    const args = [
+      "exec",
+      "-n",
+      this.namespace,
+      containerId,
+      ...(options.container ? ["-c", String(options.container)] : []),
+      "--",
+      ...command.map((item) => String(item)),
+    ];
+
+    const output = await runCommand("kubectl", args, {
+      timeoutMs: options.timeoutMs ?? 30000,
+    });
+
+    return output;
   }
 
   request(method, requestPath, body) {
@@ -376,4 +399,85 @@ function readFileOrNull(filePath) {
   } catch {
     return null;
   }
+}
+
+function runCommand(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    let stderr = "";
+    let settled = false;
+    let timeout = null;
+
+    const finish = (error, output = "") => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      if (timeout) {
+        clearTimeout(timeout);
+      }
+      if (error) {
+        reject(error);
+      } else {
+        resolve(output);
+      }
+    };
+
+    if (Number.isFinite(options.timeoutMs) && options.timeoutMs > 0) {
+      timeout = setTimeout(() => {
+        child.kill("SIGTERM");
+      }, options.timeoutMs);
+      timeout.unref?.();
+    }
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+
+    child.on("error", (error) => {
+      if (error.code === "ENOENT") {
+        finish(
+          new DockerError(
+            "kubectl is not available in the manager runtime; install kubernetes-client",
+            501,
+            { code: error.code }
+          )
+        );
+        return;
+      }
+      finish(new DockerError(error.message, 500, { code: error.code }));
+    });
+
+    child.on("close", (code, signal) => {
+      const output = [stdout.trim(), stderr.trim()].filter(Boolean).join("\n").trim();
+      if (signal) {
+        finish(
+          new DockerError(
+            output || `kubectl exec terminated by signal ${signal}`,
+            504,
+            { signal, output }
+          )
+        );
+        return;
+      }
+      if ((code || 0) !== 0) {
+        finish(
+          new DockerError(
+            output || `kubectl exec exited with code ${code}`,
+            500,
+            { exitCode: code, output }
+          )
+        );
+        return;
+      }
+      finish(null, output);
+    });
+  });
 }
