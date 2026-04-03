@@ -23,10 +23,19 @@ mkdir -p "${PENDING_DIR}" "${FILES_DIR}"
 ITEM_ID="$(date +%s%N)-$$"
 
 ensure_dillo_daemon() {
-  if command -v dpid >/dev/null 2>&1 && ! pgrep -x dpid >/dev/null 2>&1; then
-    nohup dpid >/dev/null 2>&1 &
-    sleep 0.2
-  fi
+  local daemon_path=""
+
+  for daemon_path in dpid /usr/libexec/dillo/dpid /usr/lib/dillo/dpid; do
+    if command -v "${daemon_path}" >/dev/null 2>&1 || [[ -x "${daemon_path}" ]]; then
+      if ! pgrep -x dpid >/dev/null 2>&1; then
+        nohup "${daemon_path}" >/dev/null 2>&1 &
+        sleep 0.2
+      fi
+      return 0
+    fi
+  done
+
+  return 1
 }
 
 open_in_session_browser() {
