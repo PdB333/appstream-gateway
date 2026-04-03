@@ -20,7 +20,7 @@ spec:
         - name: ghcr-creds
       containers:
         - name: manager
-          image: ghcr.io/pdb333/appstream-gateway-manager:20260403-361fc75
+          image: ghcr.io/pdb333/appstream-gateway-manager:20260403-3d271b7
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
