@@ -1025,7 +1025,6 @@ function buildKubernetesPodSpec(session, app, labels, env) {
 
 async function waitForSessionReady(session, timeoutMs = config.sessionReadyTimeoutMs) {
   const startedAt = Date.now();
-  const probePath = session.app.launch?.healthcheckPath || "/";
 
   while (Date.now() - startedAt < timeoutMs) {
     const probeAt = Date.now();
@@ -1045,12 +1044,15 @@ async function waitForSessionReady(session, timeoutMs = config.sessionReadyTimeo
     }
 
     try {
-      const statusCode = await probeHttp(session.runtimeHost || session.containerName, config.sessionInternalPort, probePath);
+      const sessionUiReady = await probeTcp(
+        session.runtimeHost || session.containerName,
+        config.sessionInternalPort
+      );
       const bridgeReady = await probeTcp(
         session.runtimeHost || session.containerName,
         config.sessionBridgePort
       );
-      if (statusCode >= 200 && statusCode < 500 && bridgeReady) {
+      if (sessionUiReady && bridgeReady) {
         return;
       }
     } catch {
