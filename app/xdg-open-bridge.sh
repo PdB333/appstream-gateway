@@ -29,7 +29,12 @@ ensure_dillo_daemon() {
     if command -v "${daemon_path}" >/dev/null 2>&1 || [[ -x "${daemon_path}" ]]; then
       if ! pgrep -x dpid >/dev/null 2>&1; then
         nohup "${daemon_path}" >/dev/null 2>&1 &
-        sleep 0.2
+        for _ in {1..20}; do
+          if pgrep -x dpid >/dev/null 2>&1; then
+            break
+          fi
+          sleep 0.1
+        done
       fi
       return 0
     fi
