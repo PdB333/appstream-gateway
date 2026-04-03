@@ -34,7 +34,7 @@ open_in_session_browser() {
 
   for candidate in "${browsers[@]}"; do
     if command -v "${candidate}" >/dev/null 2>&1; then
-      nohup "${candidate}" "${url}" >/dev/null 2>&1 &
+      setsid -f "${candidate}" "${url}" >/dev/null 2>&1 </dev/null
       return 0
     fi
   done
