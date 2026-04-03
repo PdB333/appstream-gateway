@@ -151,8 +151,8 @@ prepare_directories() {
   local dillo_dpi_dir=""
   dillo_dpi_dir="$(find /usr/lib -path '*/dillo/dpi' -type d 2>/dev/null | head -1)"
   if [[ -n "${dillo_dpi_dir}" ]]; then
-    if [[ ! -f "${SESSION_HOME}/.dillo/dpidrc" ]]; then
-      printf 'dpi_dir=%s\n' "${dillo_dpi_dir}" > "${SESSION_HOME}/.dillo/dpidrc"
+    if [[ ! -f "${SESSION_HOME}/.dillo/dpi_socket_dir" ]]; then
+      printf '%s\n' "${SESSION_HOME}/.dillo/dpi" > "${SESSION_HOME}/.dillo/dpi_socket_dir"
     fi
     chown -R "${APP_USER}:${APP_USER}" "${SESSION_HOME}/.dillo" 2>/dev/null || true
   fi
