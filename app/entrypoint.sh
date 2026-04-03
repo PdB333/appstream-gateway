@@ -512,7 +512,8 @@ resolve_launch_spec() {
       artifact_path="$(prepare_appimage "${APP_SOURCE_PATH}")"
       if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" && -d "${artifact_path}" ]]; then
         RESOLVED_WORKDIR="${artifact_path}"
-        RESOLVED_COMMAND="./AppRun ${APP_ARGS}"
+        printf -v quoted_dir '%q' "${artifact_path}"
+        RESOLVED_COMMAND="APPDIR=${quoted_dir} ./AppRun ${APP_ARGS}"
       else
         printf -v quoted_path '%q' "${artifact_path}"
         RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
@@ -527,7 +528,8 @@ resolve_launch_spec() {
       artifact_path="$(prepare_appimage "${artifact_path}")"
       if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" && -d "${artifact_path}" ]]; then
         RESOLVED_WORKDIR="${artifact_path}"
-        RESOLVED_COMMAND="./AppRun ${APP_ARGS}"
+        printf -v quoted_dir '%q' "${artifact_path}"
+        RESOLVED_COMMAND="APPDIR=${quoted_dir} ./AppRun ${APP_ARGS}"
       else
         printf -v quoted_path '%q' "${artifact_path}"
         RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
