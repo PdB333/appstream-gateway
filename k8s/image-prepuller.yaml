@@ -18,11 +18,11 @@ spec:
         - name: ghcr-creds
       initContainers:
         - name: pull-session-image
-          image: ghcr.io/pdb333/appstream-gateway-session:20260403-0e42779
+          image: ghcr.io/pdb333/appstream-gateway-session:20260403-c46623c
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-lc", "true"]
         - name: pull-manager-image
-          image: ghcr.io/pdb333/appstream-gateway-manager:20260403-3d271b7
+          image: ghcr.io/pdb333/appstream-gateway-manager:20260403-c46623c
           imagePullPolicy: IfNotPresent
           command: ["node", "-e", "process.exit(0)"]
       containers:
