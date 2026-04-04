@@ -50,7 +50,7 @@
         #display.local-cursor canvas { cursor: default !important; }
         #display.remote-cursor canvas { cursor: none !important; }
 
-        /* ── HUD container ── */
+        /* â”€â”€ HUD container â”€â”€ */
         #hud {
             position: fixed;
             top: 0;
@@ -189,7 +189,7 @@
             flex-shrink: 0;
         }
 
-        /* ── Drop overlay ── */
+        /* â”€â”€ Drop overlay â”€â”€ */
         #dropOverlay {
             display: none;
             position: fixed;
@@ -213,7 +213,7 @@
             backdrop-filter: var(--hud-blur);
         }
 
-        /* ── Toast notifications ── */
+        /* â”€â”€ Toast notifications â”€â”€ */
         .toast {
             position: fixed;
             bottom: 20px;
@@ -235,7 +235,7 @@
             100% { opacity: 0; transform: translateX(-50%) translateY(8px); }
         }
 
-        /* ── Keyboard shortcut hint ── */
+        /* â”€â”€ Keyboard shortcut hint â”€â”€ */
         .shortcut-hint {
             font-size: 10px;
             color: var(--hud-muted);
@@ -268,13 +268,14 @@
             <button id="copyToHostButton" class="hud-btn" type="button">Copy app -> host</button>
             <button id="fullscreenButton" class="hud-btn btn-accent" type="button">Fullscreen</button>
             <button id="closeAppButton" class="hud-btn btn-danger" type="button">Close app</button>
-            <span class="shortcut-hint">Ctrl+O local file • Ctrl+Alt+Shift+C hide</span>
+            <span class="shortcut-hint">Ctrl+O local file â€¢ Ctrl+Alt+Shift+C hide</span>
         </div>
     </div>
     <input id="hostFileInput" type="file" multiple hidden>
 
     <script type="module" crossorigin="anonymous">
         import RFB from './core/rfb.js';
+        import { scheduleViewportResizeBurst } from './session-resize.mjs';
 
         let rfb;
         let desktopName = "";
@@ -306,7 +307,7 @@
         const sessionId = sessionMatch ? sessionMatch[1] : "";
         const sessionToken = new URL(window.location.href).searchParams.get("token") || "";
 
-        // ── Storage keys ──
+        // â”€â”€ Storage keys â”€â”€
         const keys = {
             localCursor: "appWeb.localCursor",
             closeOnUnload: "appWeb.closeOnUnload",
@@ -314,7 +315,7 @@
             hudVisible: "appWeb.hudVisible",
         };
 
-        // ── HUD visibility ──
+        // â”€â”€ HUD visibility â”€â”€
         let hudVisible = localStorage.getItem(keys.hudVisible) !== "0";
 
         function setHudVisible(visible) {
@@ -342,7 +343,7 @@
             }, 8000);
         }
 
-        // ── Cursor mode ──
+        // â”€â”€ Cursor mode â”€â”€
         function applyLocalCursor(enabled) {
             display.classList.toggle("local-cursor", enabled);
             display.classList.toggle("remote-cursor", !enabled);
@@ -356,7 +357,7 @@
             }
         }
 
-        // ── Init toggle states from localStorage ──
+        // â”€â”€ Init toggle states from localStorage â”€â”€
         localCursorInput.checked = localStorage.getItem(keys.localCursor) !== "0";
         applyLocalCursor(localCursorInput.checked);
         closeOnUnloadInput.checked = localStorage.getItem(keys.closeOnUnload) !== "0";
@@ -375,7 +376,7 @@
             localStorage.setItem(keys.confirmOnClose, confirmOnCloseInput.checked ? "1" : "0");
         });
 
-        // ── Status ──
+        // â”€â”€ Status â”€â”€
         function setStatus(text, state = "connected", autoHide = false) {
             statusElement.textContent = text;
             statusElement.classList.remove("is-hidden");
@@ -386,7 +387,7 @@
             }
         }
 
-        // ── Query helpers ──
+        // â”€â”€ Query helpers â”€â”€
         function readQueryVariable(name, defaultValue) {
             const re = new RegExp('.*[?&]' + name + '=([^&#]*)');
             const match = document.location.href.match(re);
@@ -435,7 +436,7 @@
             } catch { }
         }
 
-        // ── Resize ──
+        // â”€â”€ Resize â”€â”€
         async function sendResize(width, height) {
             if (!sessionId) return;
             const key = `${width}x${height}`;
@@ -474,15 +475,13 @@
             resizeTimer = setTimeout(runner, 140);
         }
 
-        // ── Connection events ──
+        // â”€â”€ Connection events â”€â”€
         function connectedToServer() {
             const label = desktopName ? `Connected — ${desktopName}` : "Connected";
             setStatus(label, "connected", true);
             focusCanvas();
             if (remoteSessionResizeEnabled) {
-                queueSessionResize(undefined, undefined, true);
-                setTimeout(() => queueSessionResize(), 300);
-                setTimeout(() => queueSessionResize(), 1000);
+                scheduleViewportResizeBurst(queueSessionResize);
             }
         }
 
@@ -501,7 +500,7 @@
             document.title = desktopName || readQueryVariable("title", "app-web");
         }
 
-        // ── Fullscreen ──
+        // â”€â”€ Fullscreen â”€â”€
         fullscreenButton.addEventListener("click", () => {
             if (!document.fullscreenElement) {
                 document.documentElement.requestFullscreen().catch(() => {});
@@ -513,11 +512,11 @@
         document.addEventListener("fullscreenchange", () => {
             fullscreenButton.textContent = document.fullscreenElement ? "Exit Fullscreen" : "Fullscreen";
             if (remoteSessionResizeEnabled) {
-                setTimeout(() => queueSessionResize(undefined, undefined, true), 200);
+                scheduleViewportResizeBurst(queueSessionResize, 200);
             }
         });
 
-        // ── Keyboard shortcuts ──
+        // â”€â”€ Keyboard shortcuts â”€â”€
         // Capture at window level during capture phase so it fires BEFORE noVNC grabs the event
         window.addEventListener("keydown", (e) => {
             // Ctrl+Alt+Shift+C = toggle HUD
@@ -561,9 +560,9 @@
                     })
                     .catch(() => {});
             }
-        }, true); // ← capture phase
+        }, true); // â† capture phase
 
-        // ── Close app ──
+        // â”€â”€ Close app â”€â”€
         closeAppButton.addEventListener("click", async () => {
             suppressCloseOnUnload = true;
             setStatus("Closing app...", "connecting");
@@ -571,7 +570,7 @@
             window.location.replace("/");
         });
 
-        // ── Window events ──
+        // â”€â”€ Window events â”€â”€
         window.addEventListener("resize", () => {
             focusCanvas();
             if (remoteSessionResizeEnabled) queueSessionResize();
@@ -592,7 +591,7 @@
 
         window.addEventListener("error", () => reconnectSoon(), true);
 
-        // ── Connect to VNC ──
+        // â”€â”€ Connect to VNC â”€â”€
         const host = readQueryVariable("host", window.location.hostname);
         const port = readQueryVariable("port", window.location.port);
         const password = readQueryVariable("password");
@@ -625,7 +624,7 @@
         focusCanvas();
         setInterval(focusCanvas, 250);
 
-        // ── Session bridge: file/URL forwarding, clipboard sync, file upload ──
+        // â”€â”€ Session bridge: file/URL forwarding, clipboard sync, file upload â”€â”€
         const dropOverlay = document.getElementById("dropOverlay");
         let lastClipboardText = "";
         let pendingSessionClipboardText = "";
@@ -680,7 +679,7 @@
             hostFileInput.click();
         }
 
-        // ── xdg-open bridge (poll pending items) ──
+        // â”€â”€ xdg-open bridge (poll pending items) â”€â”€
         async function pollFileBridge() {
             try {
                 const res = await fetch(bridgeUrl("/pending"), { credentials: "same-origin" });
@@ -703,7 +702,7 @@
             } catch { }
         }
 
-        // ── Clipboard sync ──
+        // â”€â”€ Clipboard sync â”€â”€
         function hasClipboardWriteApi() {
             return Boolean(window.isSecureContext && navigator.clipboard && navigator.clipboard.writeText);
         }
@@ -849,7 +848,7 @@
             hostFileInput.value = "";
         });
 
-        // ── File upload (drag & drop) ──
+        // â”€â”€ File upload (drag & drop) â”€â”€
         let dragCounter = 0;
 
         document.addEventListener("dragenter", (e) => {
