@@ -19,7 +19,7 @@
 - Modify: `manager/src/server.js`
 - Test: `manager/tests/public-launch.test.js`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```js
 import assert from "node:assert/strict";
@@ -30,26 +30,26 @@ assert.equal(verifyLaunchToken("secret", token, "vscodium")?.clientId, "alice");
 assert.equal(verifyLaunchToken("secret", token, "obsidian"), null);
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `node --test manager/tests/public-launch.test.js`
 Expected: failure because launch token helpers do not exist yet.
 
-- [ ] **Step 3: Write minimal implementation**
+- [x] **Step 3: Write minimal implementation**
 
 Add token helpers in `auth.js` and accept a new public launch route in `server.js` that creates or resumes a session without requiring admin auth when the token is valid.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `node --test manager/tests/public-launch.test.js`
 Expected: PASS.
 
-- [ ] **Step 5: Build and deploy for prod testing**
+- [x] **Step 5: Build and deploy for prod testing**
 
 Run: `docker build -t <your-registry>/appstream-gateway-manager:<tag> . && kubectl apply -f k8s/deployment.yaml -f k8s/image-prepuller.yaml`
 Expected: the new manager image is live and reachable from the bastion path you use in production.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add manager/src/auth.js manager/src/server.js manager/tests/public-launch.test.js

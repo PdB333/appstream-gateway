@@ -62,7 +62,7 @@ docker compose up --build
 
 The default catalog includes demo apps (`xterm`, `xclock`, `xeyes`) and production apps like VSCodium, Firefox, Brave, Obsidian, Joplin, Logseq, and Krita.
 
-To publish an app behind a bastion, generate a signed public launch link from the manager. The link points to the app directly, not the admin dashboard, and the session storage stays attached to the same client key as long as the app uses `per-client` or `shared-app` storage.
+To publish an app behind a bastion, generate a signed public launch link from the manager. The link points to the app directly, not the admin dashboard, and the session storage stays attached to the same client key as long as the app uses `per-client` or `shared-app` storage. That means the same app data comes back even if the session pod is recreated, as long as the underlying volume still exists.
 
 ## Included Applications
 

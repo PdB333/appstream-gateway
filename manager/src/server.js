@@ -15,6 +15,7 @@ import { loadCatalog, normalizeApp } from "./catalog.js";
 import { DockerClient, DockerError } from "./docker-api.js";
 import { KubernetesClient } from "./kubernetes-api.js";
 import { createEventStore, createLogger } from "./logger.js";
+import { resolveStorage } from "./storage.js";
 import {
   createSessionTimings,
   finalizeSessionTimings,
@@ -738,7 +739,7 @@ async function createSession(app, { clientId }) {
   const now = Date.now();
   const sessionId = createSessionId();
   const containerName = formatDockerName(config.containerPrefix, sessionId);
-  const storage = resolveStorage(app, clientId);
+  const storage = resolveStorage(app, clientId, defaults, config.containerPrefix);
 
   const session = {
     id: sessionId,
@@ -916,28 +917,6 @@ async function resizeSessionRuntime(session, { width, height, depth }) {
     resizeError.statusCode = error.statusCode || 502;
     throw resizeError;
   }
-}
-
-function resolveStorage(app, clientId) {
-  const mode = app.storage?.mode || defaults.storageMode;
-  if (mode === "per-client") {
-    if (!clientId) {
-      return { mode: "ephemeral", homeVolumeName: "" };
-    }
-    return {
-      mode,
-      homeVolumeName: `${config.containerPrefix}-home-${slugify(clientId, "client")}-${app.id}`,
-    };
-  }
-
-  if (mode === "shared-app") {
-    return {
-      mode,
-      homeVolumeName: `${config.containerPrefix}-home-shared-${app.id}`,
-    };
-  }
-
-  return { mode: "ephemeral", homeVolumeName: "" };
 }
 
 function buildContainerSpec(session, app) {
