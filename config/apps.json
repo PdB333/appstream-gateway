@@ -289,13 +289,13 @@
       "archiveStripComponents": 0,
       "sha256": ""
     },
-    "launch": {
-      "args": "--no-remote",
-      "extractAndRun": false,
-      "preLaunchCommand": "mkdir -p /data/home/Downloads",
-      "workingDirectory": "/data/home",
-      "healthcheckPath": "/"
-    },
+      "launch": {
+        "args": "--no-remote",
+        "extractAndRun": false,
+        "preLaunchCommand": "mkdir -p /data/home/Downloads /data/home/.mozilla/firefox && find /data/home/.mozilla/firefox -type f \\( -name '.parentlock' -o -name 'lock' -o -name '.lock' -o -name 'parent.lock' \\) -delete",
+        "workingDirectory": "/data/home",
+        "healthcheckPath": "/"
+      },
     "resources": { "cpuCores": 2, "memoryMb": 4096 },
     "display": { "width": 1440, "height": 900, "depth": 24 },
     "storage": { "mode": "per-client" },
