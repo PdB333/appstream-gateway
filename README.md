@@ -31,7 +31,7 @@ This keeps each user in a separate desktop session instead of sharing one global
 - **Shared download cache** — AppImages are downloaded once and cached across sessions
 - **Resumable sessions** — reconnect to your existing session from the same browser
 - **Persistent home volumes** — per-client or per-app storage modes
-- **Public app permalinks** — signed launch links that open the same app for the same user
+- **Public app permalinks** — signed launch links that open the same app for the same user, without the manager UI
 - **Catalog-based configuration** — curated production apps via `config/apps.json`
 - **Structured logging** — JSON logs on stdout, Prometheus metrics on `/metrics`
 - **Kubernetes support** — deploy sessions as Pods instead of Docker containers
@@ -39,12 +39,15 @@ This keeps each user in a separate desktop session instead of sharing one global
 ## Architecture
 
 1. The `manager` service exposes the public HTTP entrypoint.
-2. `POST /api/sessions` asks the manager to create a session container from the generic session image.
-3. The session container starts `xpra` and the target app.
-4. The browser connects to `/sessions/<id>/`, which the manager proxies to the Xpra HTML5 session.
-5. Session traffic is authorized by a signed cookie scoped to that session path.
-6. The manager exposes Prometheus metrics on `/metrics`.
-7. Session diagnostics and container logs are available through the admin API.
+2. `GET /api/apps` returns the public catalog for the launcher UI.
+3. `GET /api/apps/<id>/launch-link` creates a signed permalink for a specific user key.
+4. `GET /launch/<token>` resolves the permalink, sets the user key cookie, and starts or resumes the app session.
+5. `POST /api/sessions` still exists for the admin dashboard and API-driven session creation.
+6. The session container starts `xpra` and the target app.
+7. The browser connects to `/sessions/<id>/`, which the manager proxies to the Xpra HTML5 session.
+8. Session traffic is authorized by a signed cookie scoped to that session path.
+9. The manager exposes Prometheus metrics on `/metrics`.
+10. Session diagnostics and container logs are available through the admin API.
 
 ## Quick Start
 
@@ -60,9 +63,11 @@ docker compose up --build
 
 6. Open the manager on the host or domain you exposed.
 
-The default catalog includes demo apps (`xterm`, `xclock`, `xeyes`) and production apps like VSCodium, Firefox, Brave, Obsidian, Joplin, Logseq, and Krita.
+The default catalog includes demo apps (`xterm`, `xclock`, `xeyes`) and production apps like VSCodium, Firefox, Brave, Obsidian, Joplin, Logseq, Krita, and Lens.
 
 To publish an app behind a bastion, generate a signed public launch link from the manager. The link points to the app directly, not the admin dashboard, and the session storage stays attached to the same client key as long as the app uses `per-client` or `shared-app` storage. That means the same app data comes back even if the session pod is recreated, as long as the underlying volume still exists.
+
+The public permalink flow depends on a stable user key. The manager stores that key in a cookie named `appweb_client_id`, and the same key is reused when the link is opened again.
 
 ## Included Applications
 
@@ -91,6 +96,8 @@ node scripts/render-catalog-configmap.mjs
 ```
 
 This regenerates `k8s/configmap-catalog.yaml` from the JSON source of truth.
+
+The catalog is what the manager reads at runtime. In Kubernetes, the `app-web-catalog` ConfigMap is mounted into the manager container from this generated manifest.
 
 ### AppImage from URL
 
@@ -225,6 +232,9 @@ kubectl apply -k k8s
 - Put the manager behind HTTPS and set `SECURE_COOKIES=true`
 - Set a strong `SESSION_SECRET` and `ADMIN_API_TOKEN`
 - Use `PUBLIC_LAUNCH_TOKEN_TTL` to control how long shared app links stay valid
+- Set `PUBLIC_BASE_URL` to the bastion-facing URL when you want generated permalinks to point at the public entrypoint
+- Use `DEFAULT_STORAGE_MODE` and per-app `storage.mode` together to decide whether new sessions are ephemeral, per-client, or shared-app
+- Leave `RESUME_SESSIONS=true` if you want the same client key to reconnect to an existing session when it is still alive
 - Keep `ALLOW_CUSTOM_APPS=false` unless you trust the admins
 - Curate `config/apps.json` — don't let users supply arbitrary binaries
 - Restrict the Docker socket to the manager only
