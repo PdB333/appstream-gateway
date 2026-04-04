@@ -275,7 +275,6 @@
 
     <script type="module" crossorigin="anonymous">
         import RFB from './core/rfb.js';
-        import { scheduleViewportResizeBurst } from './session-resize.mjs';
 
         let rfb;
         let desktopName = "";
@@ -428,6 +427,16 @@
             setTimeout(() => window.location.reload(), readNumberQuery("reconnect_delay", 1000));
         }
 
+        function refreshViewportScale() {
+            if (!rfb || typeof rfb._windowResize !== "function") return;
+            const apply = () => rfb._windowResize();
+            window.requestAnimationFrame(() => {
+                apply();
+            });
+            setTimeout(apply, 250);
+            setTimeout(apply, 1000);
+        }
+
         async function closeSession(reason, keepalive = false) {
             if (!sessionId || sessionClosing) return;
             sessionClosing = true;
@@ -480,9 +489,7 @@
             const label = desktopName ? `Connected — ${desktopName}` : "Connected";
             setStatus(label, "connected", true);
             focusCanvas();
-            if (remoteSessionResizeEnabled) {
-                scheduleViewportResizeBurst(queueSessionResize);
-            }
+            refreshViewportScale();
         }
 
         function disconnectedFromServer() {
@@ -511,9 +518,7 @@
 
         document.addEventListener("fullscreenchange", () => {
             fullscreenButton.textContent = document.fullscreenElement ? "Exit Fullscreen" : "Fullscreen";
-            if (remoteSessionResizeEnabled) {
-                scheduleViewportResizeBurst(queueSessionResize, 200);
-            }
+            refreshViewportScale();
         });
 
         // â”€â”€ Keyboard shortcuts â”€â”€
