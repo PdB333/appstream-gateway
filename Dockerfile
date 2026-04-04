@@ -88,6 +88,7 @@ RUN install -d -m 0755 /usr/share/keyrings /etc/apt/sources.list.d \
     -o /etc/apt/sources.list.d/xpra.sources \
   && apt-get update && apt-get install -y --no-install-recommends \
   xpra \
+  xpra-x11 \
   xpra-html5 \
   && rm -rf /var/lib/apt/lists/*
 
