@@ -21,28 +21,22 @@ APP_CACHE_DIR="${APP_CACHE_DIR:-/cache}"
 APP_DOWNLOAD_DIR="${APP_DOWNLOAD_DIR:-/data/downloads}"
 DATA_DIR="${DATA_DIR:-/data}"
 SESSION_HOME="${SESSION_HOME:-/data/home}"
-DISPLAY="${DISPLAY:-:0}"
+DISPLAY="${DISPLAY:-:100}"
 PORT="${PORT:-8080}"
-VNC_PORT="${VNC_PORT:-5900}"
 SCREEN_WIDTH="${SCREEN_WIDTH:-1440}"
 SCREEN_HEIGHT="${SCREEN_HEIGHT:-900}"
 SCREEN_DEPTH="${SCREEN_DEPTH:-24}"
-NOVNC_WEB_ROOT="${NOVNC_WEB_ROOT:-/app/public}"
 FILE_BRIDGE_PORT="${FILE_BRIDGE_PORT:-9091}"
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-${APP_USER}}"
 LOG_DIR="${LOG_DIR:-/tmp/app-web-logs}"
 APP_WINDOW_MODE="${APP_WINDOW_MODE:-immersive}"
-X11VNC_NCACHE="${X11VNC_NCACHE:-0}"
-X11VNC_NOXDAMAGE="${X11VNC_NOXDAMAGE:-1}"
-XVFB_MAX_WIDTH="${XVFB_MAX_WIDTH:-3840}"
-XVFB_MAX_HEIGHT="${XVFB_MAX_HEIGHT:-2160}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/appimage-launch.sh
 source "${SCRIPT_DIR}/lib/appimage-launch.sh"
 
 declare -a pids=()
-app_pid=""
+xpra_pid=""
 RESOLVED_COMMAND=""
 RESOLVED_WORKDIR=""
 
@@ -83,8 +77,8 @@ cleanup() {
   local exit_code=$?
 
   emit_log "info" "session_stopping" "Stopping session"
-  if [[ -n "${app_pid}" ]]; then
-    kill "${app_pid}" 2>/dev/null || true
+  if [[ -n "${xpra_pid}" ]]; then
+    kill "${xpra_pid}" 2>/dev/null || true
   fi
 
   for pid in "${pids[@]:-}"; do
@@ -133,7 +127,7 @@ prepare_directories() {
     "${LOG_DIR}" \
     /tmp \
     /tmp/.X11-unix
-  touch "${LOG_DIR}/xvfb.log" "${LOG_DIR}/openbox.log" "${LOG_DIR}/x11vnc.log" "${LOG_DIR}/websockify.log" "${LOG_DIR}/window-agent.log" "${LOG_DIR}/app.log"
+  touch "${LOG_DIR}/xpra.log" "${LOG_DIR}/app.log"
   touch "${LOG_DIR}/file-bridge.log"
   chmod 1777 /tmp /tmp/.X11-unix
   chmod 0700 "${XDG_RUNTIME_DIR}"
@@ -210,11 +204,7 @@ tail_component_log() {
 }
 
 start_log_forwarders() {
-  tail_component_log "xvfb" "${LOG_DIR}/xvfb.log"
-  tail_component_log "openbox" "${LOG_DIR}/openbox.log"
-  tail_component_log "x11vnc" "${LOG_DIR}/x11vnc.log"
-  tail_component_log "websockify" "${LOG_DIR}/websockify.log"
-  tail_component_log "window_agent" "${LOG_DIR}/window-agent.log"
+  tail_component_log "xpra" "${LOG_DIR}/xpra.log"
   tail_component_log "app" "${LOG_DIR}/app.log"
   tail_component_log "file_bridge" "${LOG_DIR}/file-bridge.log"
 }
@@ -565,13 +555,11 @@ set -uo pipefail
 export HOME="${SESSION_HOME}"
 export USER="${APP_USER}"
 export LOGNAME="${APP_USER}"
-export DISPLAY="${DISPLAY}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
 export XDG_CONFIG_HOME="${SESSION_HOME}/.config"
 export XDG_CACHE_HOME="${SESSION_HOME}/.cache"
 export XDG_DATA_HOME="${SESSION_HOME}/.local/share"
-export DESKTOP_SESSION="openbox"
-export XDG_CURRENT_DESKTOP="Openbox"
+export XDG_CURRENT_DESKTOP="Xpra"
 export NO_AT_BRIDGE=1
 export LIBGL_ALWAYS_SOFTWARE="${LIBGL_ALWAYS_SOFTWARE:-1}"
 export MESA_LOADER_DRIVER_OVERRIDE="${MESA_LOADER_DRIVER_OVERRIDE:-llvmpipe}"
@@ -638,7 +626,7 @@ if false && echo "${APP_LAUNCH_COMMAND}" | grep -q "AppRun\|appimage-extract-and
 fi
 WRAPEOF
 
-  printf 'exec /bin/bash -lc "$APP_LAUNCH_COMMAND"\n' >> /tmp/start-app.sh
+  printf 'exec /bin/bash -lc "$APP_LAUNCH_COMMAND" >> %q 2>&1\n' "${LOG_DIR}/app.log" >> /tmp/start-app.sh
 
   chmod 0755 /tmp/start-app.sh
 }
@@ -803,6 +791,38 @@ start_file_bridge() {
   pids+=("$!")
 }
 
+build_xpra_args() {
+  XPRA_ARGS=(
+    start
+    "${DISPLAY}"
+    "--bind-tcp=0.0.0.0:${PORT}"
+    "--html=on"
+    "--daemon=no"
+    "--exit-with-children=yes"
+    "--clipboard=yes"
+    "--file-transfer=yes"
+    "--notifications=yes"
+    "--start-child=dbus-run-session -- /bin/bash /tmp/start-app.sh"
+  )
+}
+
+start_xpra_server() {
+  emit_log "info" "xpra_start" "Starting Xpra on port ${PORT}"
+  build_xpra_args
+  runuser -u "${APP_USER}" -- env \
+    DISPLAY="${DISPLAY}" \
+    HOME="${SESSION_HOME}" \
+    USER="${APP_USER}" \
+    LOGNAME="${APP_USER}" \
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
+    XDG_CONFIG_HOME="${SESSION_HOME}/.config" \
+    XDG_CACHE_HOME="${SESSION_HOME}/.cache" \
+    XDG_DATA_HOME="${SESSION_HOME}/.local/share" \
+    xpra "${XPRA_ARGS[@]}" >>"${LOG_DIR}/xpra.log" 2>&1 &
+  xpra_pid="$!"
+  pids+=("${xpra_pid}")
+}
+
 start_dbus() {
   # Start a system D-Bus daemon if the socket doesn't exist yet
   # Many Electron/desktop apps expect a system bus for notifications, secrets, etc.
@@ -835,13 +855,6 @@ start_dbus() {
   fi
 }
 
-start_application() {
-  emit_log "info" "app_launch" "Launching ${APP_NAME}"
-  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" dbus-run-session -- /bin/bash /tmp/start-app.sh >>"${LOG_DIR}/app.log" 2>&1 &
-  app_pid="$!"
-  pids+=("${app_pid}")
-}
-
 main() {
   local exit_code=0
 
@@ -850,23 +863,14 @@ main() {
   start_log_forwarders
   write_app_script
 
-  start_xvfb
-  wait_for_display
-  apply_display_geometry "${SCREEN_WIDTH}" "${SCREEN_HEIGHT}"
-  start_window_manager
-  set_root_background
-  start_window_layout_agent
-  start_x11vnc
-  wait_for_port 127.0.0.1 "${VNC_PORT}"
-  start_websockify
+  start_dbus
+  start_xpra_server
   wait_for_port 127.0.0.1 "${PORT}"
   start_file_bridge
   wait_for_port 127.0.0.1 "${FILE_BRIDGE_PORT}"
-  start_dbus
-  start_application
 
   emit_log "info" "session_ready" "Session services are ready"
-  wait "${app_pid}" || exit_code=$?
+  wait "${xpra_pid}" || exit_code=$?
   if (( exit_code == 0 )); then
     emit_log "info" "app_exit" "Application exited cleanly"
   else
@@ -875,4 +879,6 @@ main() {
   return "${exit_code}"
 }
 
-main "$@"
+if [[ "${APP_ENTRYPOINT_LIBRARY_MODE:-0}" != "1" ]]; then
+  main "$@"
+fi

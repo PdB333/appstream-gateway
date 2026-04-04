@@ -58,25 +58,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libxshmfence1 \
   libxss1 \
   libxtst6 \
+  gnupg \
   file \
   mesa-utils \
-  openbox \
   procps \
-  python3-websockify \
   tini \
   unzip \
   x11-apps \
   x11-utils \
-  x11vnc \
   x11-xserver-utils \
   xauth \
   xdg-utils \
-  wmctrl \
   xclip \
   xsel \
-  xdotool \
   xterm \
-  xvfb \
   && GDK_PIXBUF_QL="$(find /usr/lib -name 'gdk-pixbuf-query-loaders*' -type f 2>/dev/null | head -1)" \
   && if [ -n "$GDK_PIXBUF_QL" ]; then echo "Found: $GDK_PIXBUF_QL"; "$GDK_PIXBUF_QL" --update-cache; fi \
   && echo "=== Pixbuf loaders ===" \
@@ -85,6 +80,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && (update-mime-database /usr/share/mime 2>/dev/null || true) \
   && (gtk-update-icon-cache /usr/share/icons/hicolor 2>/dev/null || true) \
   && (gtk-update-icon-cache /usr/share/icons/Adwaita 2>/dev/null || true) \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN curl -fsSL https://xpra.org/xpra.asc | apt-key add - \
+  && echo "deb https://xpra.org/stable/jammy/ ./" > /etc/apt/sources.list.d/xpra.list \
+  && apt-get update && apt-get install -y --no-install-recommends \
+  xpra \
+  xpra-html5 \
   && rm -rf /var/lib/apt/lists/*
 
 RUN dbus-uuidgen > /etc/machine-id 2>/dev/null || true \

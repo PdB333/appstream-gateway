@@ -7,7 +7,7 @@ The stack is:
 
 - one session manager exposed to users
 - one container per browser session
-- `Xvfb` + `x11vnc` + `websockify` + noVNC inside each session container
+- `xpra` with its built-in HTML5 client inside each session container
 - a catalog-driven runtime for AppImages or preinstalled X11 commands
 - a pluggable session backend: local Docker or Kubernetes Pods
 
@@ -22,7 +22,7 @@ This keeps each user in a separate desktop session instead of sharing one global
 - **Bidirectional clipboard** — copy/paste between host browser and session container
 - **File upload via drag & drop** — drop files onto the browser to upload into the session
 - **xdg-open bridge** — URLs and files opened inside the session are forwarded to the host browser
-- **Dynamic resize** — session resolution adapts to the browser window size
+- **Dynamic resize** — session display follows the browser window size
 - **Local cursor mode** — use your native browser cursor instead of the VNC-rendered one
 - **Fullscreen mode** — immersive full-screen desktop experience (F11)
 - **Collapsible HUD** — toolbar auto-hides, toggle with Ctrl+Shift+H
@@ -39,8 +39,8 @@ This keeps each user in a separate desktop session instead of sharing one global
 
 1. The `manager` service exposes the public HTTP entrypoint.
 2. `POST /api/sessions` asks the manager to create a session container from the generic session image.
-3. The session container starts `Xvfb`, `openbox`, `x11vnc`, `websockify`, and the target app.
-4. The browser connects to `/sessions/<id>/`, which the manager proxies to the right container.
+3. The session container starts `xpra` and the target app.
+4. The browser connects to `/sessions/<id>/`, which the manager proxies to the Xpra HTML5 session.
 5. Session traffic is authorized by a signed cookie scoped to that session path.
 6. The manager exposes Prometheus metrics on `/metrics`.
 7. Session diagnostics and container logs are available through the admin API.
@@ -221,7 +221,7 @@ kubectl apply -k k8s
 
 ## Limits
 
-This approach works well for many X11/Electron/AppImage applications, but it is still remote desktop delivery:
+This approach works well for many X11/Electron/AppImage applications, but it is still application streaming over Xpra:
 
 - Latency-sensitive GPU apps will be a poor fit
 - Audio, USB, webcam, DRM, and advanced window manager integrations may need extra work
@@ -232,8 +232,8 @@ This approach works well for many X11/Electron/AppImage applications, but it is 
 | Path | Description |
 |------|-------------|
 | `Dockerfile` | Generic session image |
-| `app/entrypoint.sh` | Session bootstrap (Xvfb, x11vnc, websockify, app launch) |
-| `app/public/index.html` | noVNC client with HUD, clipboard, file upload |
+| `app/entrypoint.sh` | Session bootstrap (Xpra, app launch, bridges) |
+| `app/public/index.html` | Legacy noVNC client kept for reference |
 | `app/file-bridge.py` | Session bridge server (clipboard, upload, xdg-open) |
 | `app/xdg-open-bridge.sh` | xdg-open override that forwards to the bridge |
 | `manager/` | Session manager, proxy, and API server |

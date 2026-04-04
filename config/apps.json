@@ -35,7 +35,7 @@
   {
     "id": "xclock",
     "name": "XClock",
-    "description": "Smoke-test application for validating the X11/noVNC stack.",
+    "description": "Smoke-test application for validating the Xpra stack.",
     "categories": ["demo", "utility"],
     "tags": ["smoke-test", "clock"],
     "source": {
@@ -65,7 +65,7 @@
   {
     "id": "xeyes",
     "name": "XEyes",
-    "description": "Simple X11 demo app useful to validate pointer and refresh behaviour.",
+    "description": "Simple Xpra demo app useful to validate pointer and refresh behaviour.",
     "categories": ["demo"],
     "tags": ["pointer", "x11"],
     "source": {

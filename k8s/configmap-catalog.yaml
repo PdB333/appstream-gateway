@@ -42,7 +42,7 @@ data:
       {
         "id": "xclock",
         "name": "XClock",
-        "description": "Smoke-test application for validating the X11/noVNC stack.",
+        "description": "Smoke-test application for validating the Xpra stack.",
         "categories": ["demo", "utility"],
         "tags": ["smoke-test", "clock"],
         "source": {
