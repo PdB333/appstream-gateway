@@ -82,8 +82,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && (gtk-update-icon-cache /usr/share/icons/Adwaita 2>/dev/null || true) \
   && rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL https://xpra.org/xpra.asc | apt-key add - \
-  && echo "deb https://xpra.org/stable/jammy/ ./" > /etc/apt/sources.list.d/xpra.list \
+RUN install -d -m 0755 /usr/share/keyrings /etc/apt/sources.list.d \
+  && curl -fsSL https://xpra.org/xpra.asc -o /usr/share/keyrings/xpra.asc \
+  && curl -fsSL https://raw.githubusercontent.com/Xpra-org/xpra/master/packaging/repos/jammy/xpra.sources \
+    -o /etc/apt/sources.list.d/xpra.sources \
   && apt-get update && apt-get install -y --no-install-recommends \
   xpra \
   xpra-html5 \
