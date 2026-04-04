@@ -138,7 +138,7 @@ prepare_directories() {
   fi
   chmod 1777 /dev/shm 2>/dev/null || true
 
-  chown -R "${APP_USER}:${APP_USER}" "${APP_CACHE_DIR}" "${DATA_DIR}" "${XDG_RUNTIME_DIR}" "${SESSION_HOME}"
+  chown -R "${APP_USER}:${APP_USER}" "${APP_CACHE_DIR}" "${DATA_DIR}" "${XDG_RUNTIME_DIR}" "${SESSION_HOME}" "${LOG_DIR}"
 
   # Rebuild GDK pixbuf cache at runtime into a writable location
   # (ReadonlyRootfs means the default cache path is not writable)
