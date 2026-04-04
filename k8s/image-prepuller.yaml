@@ -22,7 +22,7 @@ spec:
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-lc", "true"]
         - name: pull-manager-image
-          image: ghcr.io/pdb333/appstream-gateway-manager:20260405-permalink1
+          image: ghcr.io/pdb333/appstream-gateway-manager:20260405-permalink2
           imagePullPolicy: IfNotPresent
           command: ["node", "-e", "process.exit(0)"]
       containers:
