@@ -578,9 +578,11 @@
         // â”€â”€ Window events â”€â”€
         window.addEventListener("resize", () => {
             focusCanvas();
+            refreshViewportScale();
             if (remoteSessionResizeEnabled) queueSessionResize();
         }, { passive: true });
         window.addEventListener("orientationchange", () => {
+            refreshViewportScale();
             if (remoteSessionResizeEnabled) queueSessionResize();
         });
 

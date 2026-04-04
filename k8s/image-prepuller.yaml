@@ -18,7 +18,7 @@ spec:
         - name: ghcr-creds
       initContainers:
         - name: pull-session-image
-          image: ghcr.io/pdb333/appstream-gateway-session:20260404-scalerefresh
+          image: ghcr.io/pdb333/appstream-gateway-session:20260404-resize-followup
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-lc", "true"]
         - name: pull-manager-image
