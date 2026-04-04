@@ -215,8 +215,8 @@
             <input id="adminToken" type="password" placeholder="Needed when ADMIN_API_TOKEN is set">
           </div>
           <div class="field" style="flex: 1 1 260px;">
-            <label for="clientId">Client ID</label>
-            <input id="clientId" type="text">
+            <label for="clientId">Client / user key</label>
+            <input id="clientId" type="text" placeholder="alice, bob, team-1">
           </div>
         </div>
         <div class="row">
@@ -256,6 +256,12 @@
             <div class="field" style="flex: 1 1 180px;">
               <label for="customName">Name</label>
               <input id="customName" type="text" value="Custom app">
+            </div>
+            <div class="field" style="flex: 1 1 220px;">
+              <label for="customPresetApp">Preset app</label>
+              <select id="customPresetApp">
+                <option value="">Blank custom launch</option>
+              </select>
             </div>
             <div class="field" style="flex: 1 1 180px;">
               <label for="customSourceType">Source type</label>
@@ -366,16 +372,19 @@
       meta: null,
       overview: null,
       apps: [],
+      catalogApps: [],
       sessions: [],
       diagnostics: null,
       selectedSessionId: "",
       search: "",
       favoritesOnly: false,
       mineOnly: false,
+      customPresetAppId: "",
     };
 
     const adminTokenInput = document.getElementById("adminToken");
     const clientIdInput = document.getElementById("clientId");
+    const customPresetAppInput = document.getElementById("customPresetApp");
     const metaNotice = document.getElementById("metaNotice");
     const actionNotice = document.getElementById("actionNotice");
     const overviewCards = document.getElementById("overviewCards");
@@ -539,6 +548,7 @@
           <div class="row">
             <button data-launch="${escapeHtml(app.id)}" ${launchLocked ? 'disabled title="Enter the admin token first"' : ""}>${app.session.resume ? "Open / Resume" : "Launch"}</button>
             <a href="${escapeHtml(buildDirectAppLaunchUrl(app.id))}" target="_blank" rel="noreferrer">${app.session.resume ? "Direct resume link" : "Direct launch link"}</a>
+            <button class="secondary" data-public-link="${escapeHtml(app.id)}" ${launchLocked ? 'disabled title="Enter the admin token first"' : ""}>Copy public link</button>
           </div>
         `;
         catalogApps.appendChild(card);
@@ -559,6 +569,10 @@
           saveFavorites();
           renderApps();
         });
+      });
+
+      catalogApps.querySelectorAll("[data-public-link]").forEach((button) => {
+        button.addEventListener("click", () => copyPublicLaunchLink(button.dataset.publicLink));
       });
     }
 
@@ -724,7 +738,10 @@
       try {
         state.meta = await api("/api/meta");
         state.apps = (await api("/api/apps")).apps || [];
+        state.catalogApps =
+          !state.meta.adminRequired || state.adminToken ? (await api("/api/catalog")).apps || [] : [];
         renderMeta();
+        renderCustomPresetOptions();
         renderApps();
 
         if (!state.meta.adminRequired || state.adminToken) {
@@ -749,9 +766,129 @@
       }
     }
 
+    function findApp(appId) {
+      return (
+        state.catalogApps.find((app) => app.id === appId) ||
+        state.apps.find((app) => app.id === appId) ||
+        null
+      );
+    }
+
+    function renderCustomPresetOptions() {
+      const current = customPresetAppInput.value || state.customPresetAppId || "";
+      customPresetAppInput.innerHTML = '<option value="">Blank custom launch</option>';
+      const sortedApps = [...state.apps].sort((left, right) => {
+        if (left.featured !== right.featured) {
+          return Number(right.featured) - Number(left.featured);
+        }
+        return String(left.name).localeCompare(String(right.name));
+      });
+
+      for (const app of sortedApps) {
+        const option = document.createElement("option");
+        option.value = app.id;
+        option.textContent = `${app.name} (${app.sourceType})`;
+        customPresetAppInput.appendChild(option);
+      }
+
+      customPresetAppInput.value = current;
+    }
+
+    function resetCustomLaunchForm() {
+      state.customPresetAppId = "";
+      customPresetAppInput.value = "";
+      document.getElementById("customName").value = "Custom app";
+      document.getElementById("customSourceType").value = "appimage-url";
+      document.getElementById("customUrl").value = "";
+      document.getElementById("customPath").value = "";
+      document.getElementById("customCommand").value = "";
+      document.getElementById("customArchiveEntrypoint").value = "";
+      document.getElementById("customArgs").value = "";
+      document.getElementById("customWorkdir").value = "";
+      document.getElementById("customExtractAndRun").checked = true;
+      document.getElementById("customSha").value = "";
+      document.getElementById("customPreLaunch").value = "";
+      document.getElementById("customStorageMode").value = "per-client";
+      updateCustomFields();
+    }
+
+    function applyCustomPreset(appId) {
+      state.customPresetAppId = appId;
+      customPresetAppInput.value = appId;
+      const app = findApp(appId);
+      if (!app) {
+        return;
+      }
+
+      resetCustomLaunchForm();
+      state.customPresetAppId = appId;
+      customPresetAppInput.value = appId;
+      document.getElementById("customName").value = app.name || "Custom app";
+      document.getElementById("customSourceType").value = app.sourceType || "command";
+      document.getElementById("customArgs").value = app.launch?.args || "";
+      document.getElementById("customWorkdir").value = app.launch?.workingDirectory || "";
+      document.getElementById("customPreLaunch").value = app.launch?.preLaunchCommand || "";
+      document.getElementById("customStorageMode").value = app.storage?.mode || "per-client";
+      document.getElementById("customSha").value = app.source?.sha256 || "";
+
+      if (app.sourceType === "command") {
+        document.getElementById("customCommand").value = app.source?.command || "";
+      } else if (app.sourceType === "binary-path" || app.sourceType === "appimage-file") {
+        document.getElementById("customPath").value = app.source?.path || "";
+      } else {
+        document.getElementById("customUrl").value = app.source?.url || "";
+      }
+
+      if (app.sourceType === "archive-url") {
+        document.getElementById("customArchiveEntrypoint").value = app.source?.archiveEntrypoint || "";
+      }
+
+      document.getElementById("customExtractAndRun").checked = Boolean(app.launch?.extractAndRun);
+      updateCustomFields();
+      setActionNotice(`Preset loaded from ${app.name}.`, "success");
+    }
+
+    async function copyPublicLaunchLink(appId) {
+      if (state.meta?.adminRequired && !state.adminToken) {
+        setActionNotice("Enter the admin token and click Save access before generating a public link.", "error");
+        return;
+      }
+
+      const app = findApp(appId);
+      if (!app) {
+        setActionNotice("Unknown app.", "error");
+        return;
+      }
+
+      if (!state.clientId.trim()) {
+        setActionNotice("Set a client / user key first.", "error");
+        return;
+      }
+
+      try {
+        const result = await api(`/api/apps/${encodeURIComponent(appId)}/launch-link`, {
+          method: "GET",
+        });
+        if (!result?.url) {
+          throw new Error("Launch link was not returned by the manager.");
+        }
+
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(result.url);
+          setActionNotice(`Public link copied for ${app.name}.`, "success");
+        } else {
+          setActionNotice(`Public link: <a href="${escapeHtml(result.url)}" target="_blank" rel="noreferrer">${escapeHtml(result.url)}</a>`, "success", true);
+        }
+      } catch (error) {
+        setActionNotice(error.message, "error");
+      }
+    }
+
     function buildCustomAppPayload() {
       const sourceType = document.getElementById("customSourceType").value;
-      const source = { type: sourceType };
+      const presetApp = findApp(customPresetAppInput.value || "");
+      const source = presetApp?.source ? { ...presetApp.source } : { type: sourceType };
+      source.type = sourceType;
 
       if (sourceType === "command") {
         source.command = document.getElementById("customCommand").value.trim();
@@ -769,17 +906,26 @@
         source.sha256 = document.getElementById("customSha").value.trim();
       }
 
+      const baseApp = presetApp
+        ? (() => {
+            const { id: _id, ...rest } = presetApp;
+            return rest;
+          })()
+        : null;
+
       return {
         clientId: state.clientId,
         resumeIfExists: true,
         app: {
-          name: document.getElementById("customName").value.trim() || "Custom app",
-          description: "Custom launch from dashboard",
+          ...(baseApp || {}),
+          name: document.getElementById("customName").value.trim() || presetApp?.name || "Custom app",
+          description: presetApp?.description || "Custom launch from dashboard",
           featured: false,
-          categories: ["custom"],
-          tags: [sourceType],
+          categories: [...new Set([...(presetApp?.categories || []), "custom"])],
+          tags: [...new Set([...(presetApp?.tags || []), "custom", sourceType])],
           source,
           launch: {
+            ...(presetApp?.launch || {}),
             args: document.getElementById("customArgs").value.trim(),
             preLaunchCommand: document.getElementById("customPreLaunch").value.trim(),
             workingDirectory: document.getElementById("customWorkdir").value.trim(),
@@ -789,8 +935,10 @@
             mode: document.getElementById("customStorageMode").value,
           },
           session: {
+            ...(presetApp?.session || {}),
             resume: true,
           },
+          env: presetApp?.env || {},
         },
       };
     }
@@ -798,6 +946,7 @@
     function updateCustomFields() {
       const sourceType = document.getElementById("customSourceType").value;
       const isAppImage = sourceType === "appimage-url" || sourceType === "appimage-file";
+      state.customPresetAppId = customPresetAppInput.value || "";
       document.getElementById("customUrlField").hidden = !["appimage-url", "archive-url"].includes(sourceType);
       document.getElementById("customPathField").hidden = !["binary-path", "appimage-file"].includes(sourceType);
       document.getElementById("customCommandField").hidden = sourceType !== "command";
@@ -805,7 +954,7 @@
       document.getElementById("customExtractAndRunField").hidden = !isAppImage;
       if (!isAppImage) {
         document.getElementById("customExtractAndRun").checked = false;
-      } else if (sourceType === "appimage-url") {
+      } else if (sourceType === "appimage-url" && !state.customPresetAppId) {
         document.getElementById("customExtractAndRun").checked = true;
       }
     }
@@ -855,6 +1004,14 @@
     document.getElementById("mineOnly").addEventListener("change", (event) => {
       state.mineOnly = event.target.checked;
       refreshData();
+    });
+    customPresetAppInput.addEventListener("change", (event) => {
+      if (event.target.value) {
+        applyCustomPreset(event.target.value);
+      } else {
+        resetCustomLaunchForm();
+      }
+      updateCustomFields();
     });
     document.getElementById("customSourceType").addEventListener("change", updateCustomFields);
     document.getElementById("launchCustom").addEventListener("click", () => {

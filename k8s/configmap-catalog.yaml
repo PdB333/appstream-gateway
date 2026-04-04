@@ -72,7 +72,7 @@ data:
       {
         "id": "xeyes",
         "name": "XEyes",
-        "description": "Simple X11 demo app useful to validate pointer and refresh behaviour.",
+        "description": "Simple Xpra demo app useful to validate pointer and refresh behaviour.",
         "categories": ["demo"],
         "tags": ["pointer", "x11"],
         "source": {
@@ -100,9 +100,49 @@ data:
         }
       },
       {
+        "id": "vscodium",
+        "name": "VSCodium",
+        "description": "Open-source VS Code editor delivered as an Electron AppImage.",
+        "featured": true,
+        "categories": ["development", "editor"],
+        "tags": ["electron", "vscode", "ide"],
+        "source": {
+          "type": "appimage-url",
+          "url": "https://github.com/VSCodium/vscodium/releases/download/1.110.11631/VSCodium-1.110.11631.glibc2.30-x86_64.AppImage",
+          "sha256": ""
+        },
+        "launch": {
+          "args": "--no-sandbox --disable-gpu --disable-dev-shm-usage --disable-gpu-sandbox",
+          "extractAndRun": true,
+          "preLaunchCommand": "mkdir -p /data/home/.config/VSCodium/User && test -f /data/home/.config/VSCodium/User/settings.json || echo '{\"files.simpleDialog.enable\":true,\"window.titleBarStyle\":\"custom\",\"telemetry.telemetryLevel\":\"off\"}' > /data/home/.config/VSCodium/User/settings.json",
+          "workingDirectory": "/data/home",
+          "healthcheckPath": "/"
+        },
+        "resources": {
+          "cpuCores": 2,
+          "memoryMb": 4096
+        },
+        "display": {
+          "width": 1440,
+          "height": 900,
+          "depth": 24
+        },
+        "storage": {
+          "mode": "per-client"
+        },
+        "session": {
+          "resume": true
+        },
+        "env": {
+          "ELECTRON_DISABLE_SANDBOX": "1",
+          "ELECTRON_DISABLE_GPU": "1"
+        }
+      },
+      {
         "id": "lens",
         "name": "Lens Desktop",
         "description": "Kubernetes IDE delivered as an Electron AppImage.",
+        "featured": false,
         "categories": ["devops", "kubernetes"],
         "tags": ["electron", "k8s", "ide"],
         "source": {
@@ -131,6 +171,173 @@ data:
         "session": {
           "resume": true
         },
+        "env": {
+          "ELECTRON_DISABLE_SANDBOX": "1",
+          "ELECTRON_DISABLE_GPU": "1"
+        }
+      },
+      {
+        "id": "obsidian",
+        "name": "Obsidian",
+        "description": "Knowledge base and note-taking with Markdown, graph view, and plugins.",
+        "featured": true,
+        "categories": ["productivity", "notes"],
+        "tags": ["electron", "markdown", "notes"],
+        "source": {
+          "type": "appimage-url",
+          "url": "https://github.com/obsidianmd/obsidian-releases/releases/download/v1.12.4/Obsidian-1.12.4.AppImage",
+          "sha256": ""
+        },
+        "launch": {
+          "args": "--no-sandbox --disable-gpu --disable-dev-shm-usage --disable-gpu-sandbox",
+          "extractAndRun": true,
+          "workingDirectory": "/data/home",
+          "healthcheckPath": "/"
+        },
+        "resources": { "cpuCores": 2, "memoryMb": 4096 },
+        "display": { "width": 1440, "height": 900, "depth": 24 },
+        "storage": { "mode": "per-client" },
+        "session": { "resume": true },
+        "env": {
+          "ELECTRON_DISABLE_SANDBOX": "1",
+          "ELECTRON_DISABLE_GPU": "1"
+        }
+      },
+      {
+        "id": "joplin",
+        "name": "Joplin",
+        "description": "Open-source note-taking and to-do app with sync, encryption, and Markdown support.",
+        "featured": true,
+        "categories": ["productivity", "notes"],
+        "tags": ["electron", "markdown", "notes", "sync"],
+        "source": {
+          "type": "appimage-url",
+          "url": "https://github.com/laurent22/joplin/releases/download/v3.5.13/Joplin-3.5.13.AppImage",
+          "sha256": ""
+        },
+        "launch": {
+          "args": "--no-sandbox --disable-gpu --disable-dev-shm-usage --disable-gpu-sandbox",
+          "extractAndRun": true,
+          "workingDirectory": "/data/home",
+          "healthcheckPath": "/"
+        },
+        "resources": { "cpuCores": 2, "memoryMb": 4096 },
+        "display": { "width": 1440, "height": 900, "depth": 24 },
+        "storage": { "mode": "per-client" },
+        "session": { "resume": true },
+        "env": {
+          "ELECTRON_DISABLE_SANDBOX": "1",
+          "ELECTRON_DISABLE_GPU": "1"
+        }
+      },
+      {
+        "id": "logseq",
+        "name": "Logseq",
+        "description": "Privacy-first knowledge management with outliner, graph view, and local-first storage.",
+        "featured": true,
+        "categories": ["productivity", "knowledge"],
+        "tags": ["electron", "outliner", "graph", "notes"],
+        "source": {
+          "type": "appimage-url",
+          "url": "https://github.com/logseq/logseq/releases/download/0.10.15/Logseq-linux-x64-0.10.15.AppImage",
+          "sha256": ""
+        },
+        "launch": {
+          "args": "--no-sandbox --disable-gpu --disable-dev-shm-usage --disable-gpu-sandbox",
+          "extractAndRun": true,
+          "workingDirectory": "/data/home",
+          "healthcheckPath": "/"
+        },
+        "resources": { "cpuCores": 2, "memoryMb": 4096 },
+        "display": { "width": 1440, "height": 900, "depth": 24 },
+        "storage": { "mode": "per-client" },
+        "session": { "resume": true },
+        "env": {
+          "ELECTRON_DISABLE_SANDBOX": "1",
+          "ELECTRON_DISABLE_GPU": "1"
+        }
+      },
+      {
+        "id": "krita",
+        "name": "Krita",
+        "description": "Professional digital painting and illustration application.",
+        "featured": true,
+        "categories": ["graphics", "creative"],
+        "tags": ["qt", "painting", "drawing", "art"],
+        "source": {
+          "type": "appimage-url",
+          "url": "https://download.kde.org/stable/krita/5.2.16/krita-5.2.16-x86_64.AppImage",
+          "sha256": ""
+        },
+        "launch": {
+          "args": "",
+          "extractAndRun": false,
+          "workingDirectory": "/data/home",
+          "healthcheckPath": "/"
+        },
+        "resources": { "cpuCores": 2, "memoryMb": 4096 },
+        "display": { "width": 1920, "height": 1080, "depth": 24 },
+        "storage": { "mode": "per-client" },
+        "session": { "resume": true },
+        "env": {}
+      },
+      {
+        "id": "firefox",
+        "name": "Firefox",
+        "description": "Mozilla Firefox web browser.",
+        "featured": true,
+        "categories": ["internet", "browser"],
+        "tags": ["browser", "web", "mozilla"],
+        "source": {
+          "type": "archive-url",
+          "url": "https://download.mozilla.org/?product=firefox-latest-ssl&os=linux64&lang=en-US",
+          "archiveEntrypoint": "firefox/firefox",
+          "archiveFormat": "auto",
+          "archiveStripComponents": 0,
+          "sha256": ""
+        },
+        "launch": {
+          "args": "--no-remote",
+          "extractAndRun": false,
+          "preLaunchCommand": "mkdir -p /data/home/Downloads",
+          "workingDirectory": "/data/home",
+          "healthcheckPath": "/"
+        },
+        "resources": { "cpuCores": 2, "memoryMb": 4096 },
+        "display": { "width": 1440, "height": 900, "depth": 24 },
+        "storage": { "mode": "per-client" },
+        "session": { "resume": true },
+        "env": {
+          "MOZ_DISABLE_CONTENT_SANDBOX": "1",
+          "MOZ_DISABLE_GMP_SANDBOX": "1",
+          "MOZ_DISABLE_RDD_SANDBOX": "1"
+        }
+      },
+      {
+        "id": "brave",
+        "name": "Brave Browser",
+        "description": "Privacy-focused Chromium-based browser with built-in ad blocker.",
+        "featured": true,
+        "categories": ["internet", "browser"],
+        "tags": ["chromium", "browser", "privacy"],
+        "source": {
+          "type": "archive-url",
+          "url": "https://github.com/brave/brave-browser/releases/download/v1.88.132/brave-browser-1.88.132-linux-amd64.zip",
+          "archiveEntrypoint": "brave",
+          "archiveFormat": "zip",
+          "archiveStripComponents": 0,
+          "sha256": ""
+        },
+        "launch": {
+          "args": "--no-sandbox --disable-gpu --disable-dev-shm-usage --disable-gpu-sandbox --no-first-run",
+          "extractAndRun": false,
+          "workingDirectory": "/data/home",
+          "healthcheckPath": "/"
+        },
+        "resources": { "cpuCores": 2, "memoryMb": 4096 },
+        "display": { "width": 1440, "height": 900, "depth": 24 },
+        "storage": { "mode": "per-client" },
+        "session": { "resume": true },
         "env": {
           "ELECTRON_DISABLE_SANDBOX": "1",
           "ELECTRON_DISABLE_GPU": "1"

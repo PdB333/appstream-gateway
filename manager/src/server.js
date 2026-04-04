@@ -5,7 +5,12 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { signSessionToken, verifySessionToken } from "./auth.js";
+import {
+  signLaunchToken,
+  signSessionToken,
+  verifyLaunchToken,
+  verifySessionToken,
+} from "./auth.js";
 import { loadCatalog, normalizeApp } from "./catalog.js";
 import { DockerClient, DockerError } from "./docker-api.js";
 import { KubernetesClient } from "./kubernetes-api.js";
@@ -54,6 +59,10 @@ const config = {
   k8sSessionImagePullSecret: process.env.K8S_SESSION_IMAGE_PULL_SECRET || "",
   sessionSecret: process.env.SESSION_SECRET || "insecure-development-secret",
   sessionTokenTtlMs: parseDurationMs(process.env.SESSION_TOKEN_TTL, 7 * 24 * 60 * 60 * 1000),
+  publicLaunchTokenTtlMs: parseDurationMs(
+    process.env.PUBLIC_LAUNCH_TOKEN_TTL,
+    365 * 24 * 60 * 60 * 1000
+  ),
   defaultSessionTtlMs: parseDurationMs(process.env.DEFAULT_SESSION_TTL, 2 * 60 * 60 * 1000),
   sessionReadyTimeoutMs: parseDurationMs(process.env.SESSION_READY_TIMEOUT, 90 * 1000),
   reaperIntervalMs: parseDurationMs(process.env.REAPER_INTERVAL, 30 * 1000),
@@ -198,6 +207,21 @@ async function handleRequest(request, response) {
     return json(response, 200, {
       apps: [...appCatalog.values()].map(serializeCatalogApp),
     });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/catalog") {
+    requireAdmin(request);
+    return json(response, 200, {
+      apps: [...appCatalog.values()],
+    });
+  }
+
+  if (request.method === "GET" && url.pathname.startsWith("/api/apps/") && url.pathname.endsWith("/launch-link")) {
+    return handleLaunchLinkApi(request, response, url);
+  }
+
+  if (request.method === "GET" && url.pathname.startsWith("/launch/")) {
+    return handlePublicLaunch(request, response, url);
   }
 
   if (request.method === "GET" && url.pathname.startsWith("/app/")) {
@@ -456,6 +480,94 @@ async function handleSessionApi(request, response, url) {
   }
 
   return text(response, 404, "Not found");
+}
+
+async function handleLaunchLinkApi(request, response, url) {
+  const match = url.pathname.match(/^\/api\/apps\/([a-z0-9][a-z0-9-_]*)\/launch-link\/?$/i);
+  if (!match) {
+    return text(response, 404, "Not found");
+  }
+
+  requireAdmin(request, url);
+
+  const appId = match[1];
+  const app = appCatalog.get(appId);
+  if (!app) {
+    return text(response, 404, "App not found");
+  }
+
+  const clientId = getClientId(request, null, url);
+  if (!clientId) {
+    return json(response, 400, { error: "clientId is required to generate a launch link" });
+  }
+
+  const baseUrl = buildBaseUrl(request, config.publicBaseUrl);
+  const token = signLaunchToken(config.sessionSecret, app.id, clientId, config.publicLaunchTokenTtlMs);
+
+  return json(response, 200, {
+    appId: app.id,
+    clientId,
+    expiresAt: msToIso(Date.now() + config.publicLaunchTokenTtlMs),
+    url: `${baseUrl}/launch/${encodeURIComponent(token)}`,
+  });
+}
+
+async function handlePublicLaunch(request, response, url) {
+  const match = url.pathname.match(/^\/launch\/([^/]+)\/?$/i);
+  if (!match) {
+    return text(response, 404, "Launch not found");
+  }
+
+  const token = decodeURIComponent(match[1]);
+  const payload = verifyLaunchToken(config.sessionSecret, token);
+  if (!payload) {
+    const error = new Error("Unauthorized");
+    error.statusCode = 401;
+    throw error;
+  }
+
+  const app = appCatalog.get(payload.appId);
+  if (!app) {
+    return text(response, 404, "App not found");
+  }
+
+  const resumeIfExists = url.searchParams.get("resume") !== "0";
+  const clientId = payload.clientId;
+  const reusableSession =
+    resumeIfExists && app.session.resume && clientId
+      ? findReusableSession(app.id, clientId)
+      : null;
+  const existingSession =
+    reusableSession && (await ensureReusableSessionHealthy(reusableSession))
+      ? reusableSession
+      : null;
+
+  if (typeof response.setHeader === "function") {
+    appendSetCookie(
+      response,
+      serializeCookie("appweb_client_id", clientId, {
+        path: "/",
+        maxAge: Math.floor(config.publicLaunchTokenTtlMs / 1000),
+        secure: config.secureCookies,
+        sameSite: "Lax",
+        httpOnly: false,
+      })
+    );
+  }
+
+  const session =
+    existingSession ? markSessionReused(existingSession) : await createSession(app, { clientId });
+  const serializedSession = serializeSession(
+    session,
+    request,
+    existingSession ? { reused: true } : {}
+  );
+
+  response.writeHead(302, {
+    location: serializedSession.url,
+    "cache-control": "no-store",
+  });
+  response.end();
 }
 
 async function handleDirectAppLaunch(request, response, url) {

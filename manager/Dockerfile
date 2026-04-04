@@ -12,8 +12,8 @@ RUN apt-get update \
 COPY package.json /app/package.json
 COPY src /app/src
 COPY public /app/public
-RUN find /app/src -type f -name "*.js" -exec sed -i 's/\r$//' {} + \
-  && find /app/public -type f -name "*.html" -exec sed -i 's/\r$//' {} + \
+RUN find /app/src -type f -name "*.js" -exec perl -0pi -e 's/\r//g' {} + \
+  && find /app/public -type f -name "*.html" -exec perl -0pi -e 's/\r//g' {} + \
   && node --check /app/src/server.js \
   && node --check /app/src/docker-api.js \
   && node --check /app/src/kubernetes-api.js \

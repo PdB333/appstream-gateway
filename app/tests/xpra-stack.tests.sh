@@ -36,12 +36,15 @@ main() {
   assert_contains "${joined}" ":100" "xpra command should use the configured display"
   assert_contains "${joined}" "--bind-tcp=0.0.0.0:1234" "xpra command should bind the session HTTP port"
   assert_contains "${joined}" "--html=on" "xpra command should expose the HTML5 client"
+  assert_contains "${joined}" "--dpi=96" "xpra command should force a sane DPI"
+  assert_contains "${joined}" "--resize-display=yes" "xpra command should resize to the client viewport"
   assert_contains "${joined}" "--start-child=dbus-run-session -- /bin/bash /tmp/start-app.sh" "xpra command should launch the app child"
 
   write_app_script
   local app_script
   app_script="$(cat /tmp/start-app.sh)"
   assert_contains "${app_script}" "XDG_CURRENT_DESKTOP=\"Xpra\"" "app script should identify the Xpra session"
+  assert_contains "${app_script}" "XAUTHORITY=\"${SESSION_HOME}/.Xauthority\"" "app script should use the session Xauthority"
   assert_contains "${app_script}" "APP_LAUNCH_COMMAND" "app script should embed the resolved launch command"
 }
 

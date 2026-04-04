@@ -29,6 +29,7 @@ SCREEN_DEPTH="${SCREEN_DEPTH:-24}"
 FILE_BRIDGE_PORT="${FILE_BRIDGE_PORT:-9091}"
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-${APP_USER}}"
 LOG_DIR="${LOG_DIR:-/tmp/app-web-logs}"
+XAUTHORITY="${XAUTHORITY:-${SESSION_HOME}/.Xauthority}"
 APP_WINDOW_MODE="${APP_WINDOW_MODE:-immersive}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -129,6 +130,7 @@ prepare_directories() {
     /tmp/.X11-unix
   touch "${LOG_DIR}/xpra.log" "${LOG_DIR}/app.log"
   touch "${LOG_DIR}/file-bridge.log"
+  touch "${XAUTHORITY}" 2>/dev/null || true
   chmod 1777 /tmp /tmp/.X11-unix
   chmod 0700 "${XDG_RUNTIME_DIR}"
 
@@ -139,6 +141,7 @@ prepare_directories() {
   chmod 1777 /dev/shm 2>/dev/null || true
 
   chown -R "${APP_USER}:${APP_USER}" "${APP_CACHE_DIR}" "${DATA_DIR}" "${XDG_RUNTIME_DIR}" "${SESSION_HOME}" "${LOG_DIR}"
+  chown "${APP_USER}:${APP_USER}" "${XAUTHORITY}" 2>/dev/null || true
 
   # Rebuild GDK pixbuf cache at runtime into a writable location
   # (ReadonlyRootfs means the default cache path is not writable)
@@ -212,7 +215,7 @@ start_log_forwarders() {
 wait_for_display() {
   local retries=60
 
-  until runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" xdpyinfo >/dev/null 2>&1; do
+  until runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" HOME="${SESSION_HOME}" XAUTHORITY="${XAUTHORITY}" xdpyinfo >/dev/null 2>&1; do
     retries=$((retries - 1))
     if (( retries == 0 )); then
       emit_log "error" "display_not_ready" "Display did not become ready"
@@ -555,6 +558,7 @@ set -uo pipefail
 export HOME="${SESSION_HOME}"
 export USER="${APP_USER}"
 export LOGNAME="${APP_USER}"
+export XAUTHORITY="${XAUTHORITY}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
 export XDG_CONFIG_HOME="${SESSION_HOME}/.config"
 export XDG_CACHE_HOME="${SESSION_HOME}/.cache"
@@ -640,7 +644,7 @@ start_xvfb() {
   local xvfb_height="${SCREEN_HEIGHT}"
 
   emit_log "info" "xvfb_start" "Starting Xvfb at ${xvfb_width}x${xvfb_height}x${SCREEN_DEPTH}"
-  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" Xvfb "${DISPLAY}" \
+  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" HOME="${SESSION_HOME}" XAUTHORITY="${XAUTHORITY}" Xvfb "${DISPLAY}" \
     -screen 0 "${xvfb_width}x${xvfb_height}x${SCREEN_DEPTH}" \
     +extension RANDR +extension GLX \
     -dpi 96 \
@@ -649,10 +653,15 @@ start_xvfb() {
 }
 
 start_window_manager() {
+  if [[ "${APP_WINDOW_MODE}" != "immersive" ]]; then
+    return
+  fi
+
   emit_log "info" "openbox_start" "Starting openbox"
   runuser -u "${APP_USER}" -- env \
     DISPLAY="${DISPLAY}" \
     HOME="${SESSION_HOME}" \
+    XAUTHORITY="${XAUTHORITY}" \
     XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
     XDG_CONFIG_HOME="${SESSION_HOME}/.config" \
     XDG_CACHE_HOME="${SESSION_HOME}/.cache" \
@@ -662,7 +671,7 @@ start_window_manager() {
 }
 
 set_root_background() {
-  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" HOME="${SESSION_HOME}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" xsetroot -solid "#050505" >>"${LOG_DIR}/window-agent.log" 2>&1 || true
+  runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" HOME="${SESSION_HOME}" XAUTHORITY="${XAUTHORITY}" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" xsetroot -solid "#050505" >>"${LOG_DIR}/window-agent.log" 2>&1 || true
 }
 
 start_window_layout_agent() {
@@ -677,6 +686,7 @@ start_window_layout_agent() {
 set -uo pipefail
 export DISPLAY="${DISPLAY}"
 export HOME="${SESSION_HOME}"
+export XAUTHORITY="${XAUTHORITY}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
 fallback_width="${SCREEN_WIDTH}"
 fallback_height="${SCREEN_HEIGHT}"
@@ -798,6 +808,8 @@ build_xpra_args() {
     "--bind-tcp=0.0.0.0:${PORT}"
     "--html=on"
     "--daemon=no"
+    "--dpi=96"
+    "--resize-display=yes"
     "--exit-with-children=yes"
     "--clipboard=yes"
     "--file-transfer=yes"
@@ -812,6 +824,7 @@ start_xpra_server() {
   runuser -u "${APP_USER}" -- env \
     DISPLAY="${DISPLAY}" \
     HOME="${SESSION_HOME}" \
+    XAUTHORITY="${XAUTHORITY}" \
     USER="${APP_USER}" \
     LOGNAME="${APP_USER}" \
     XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}" \
@@ -865,6 +878,7 @@ main() {
 
   start_dbus
   start_xpra_server
+  wait_for_display || emit_log "warn" "display_not_ready" "Continuing despite display readiness check failure"
   wait_for_port 127.0.0.1 "${PORT}"
   start_file_bridge
   wait_for_port 127.0.0.1 "${FILE_BRIDGE_PORT}"

@@ -1,7 +1,7 @@
 FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
-ENV DISPLAY=:0
+ENV DISPLAY=:100
 ENV PORT=8080
 ENV APP_USER=appuser
 ENV APP_CACHE_DIR=/cache
@@ -58,11 +58,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libxshmfence1 \
   libxss1 \
   libxtst6 \
+  openbox \
   gnupg \
   file \
   mesa-utils \
   python3-dbus \
   python3-xdg \
+  wmctrl \
   procps \
   tini \
   unzip \
@@ -101,7 +103,7 @@ RUN dbus-uuidgen > /etc/machine-id 2>/dev/null || true \
 
 WORKDIR /app
 COPY app /app
-RUN sed -i 's/\r$//' /app/entrypoint.sh /app/xdg-open-bridge.sh /app/file-bridge.py 2>/dev/null || true \
+RUN perl -pi -e 's/\r$//' /app/entrypoint.sh /app/xdg-open-bridge.sh /app/file-bridge.py 2>/dev/null || true \
   && chmod 0755 /app/entrypoint.sh /app/xdg-open-bridge.sh /app/file-bridge.py
 
 HEALTHCHECK --interval=20s --timeout=5s --start-period=20s --retries=3 CMD \

@@ -31,6 +31,7 @@ This keeps each user in a separate desktop session instead of sharing one global
 - **Shared download cache** — AppImages are downloaded once and cached across sessions
 - **Resumable sessions** — reconnect to your existing session from the same browser
 - **Persistent home volumes** — per-client or per-app storage modes
+- **Public app permalinks** — signed launch links that open the same app for the same user
 - **Catalog-based configuration** — curated production apps via `config/apps.json`
 - **Structured logging** — JSON logs on stdout, Prometheus metrics on `/metrics`
 - **Kubernetes support** — deploy sessions as Pods instead of Docker containers
@@ -61,6 +62,8 @@ docker compose up --build
 
 The default catalog includes demo apps (`xterm`, `xclock`, `xeyes`) and production apps like VSCodium, Firefox, Brave, Obsidian, Joplin, Logseq, and Krita.
 
+To publish an app behind a bastion, generate a signed public launch link from the manager. The link points to the app directly, not the admin dashboard, and the session storage stays attached to the same client key as long as the app uses `per-client` or `shared-app` storage.
+
 ## Included Applications
 
 | App | Type | Category |
@@ -80,6 +83,14 @@ The default catalog includes demo apps (`xterm`, `xclock`, `xeyes`) and producti
 ## Add An Application
 
 Edit `config/apps.json` and add an entry. Three source types are supported:
+
+If you change the catalog and want the Kubernetes ConfigMap to stay in sync, run:
+
+```bash
+node scripts/render-catalog-configmap.mjs
+```
+
+This regenerates `k8s/configmap-catalog.yaml` from the JSON source of truth.
 
 ### AppImage from URL
 
@@ -213,6 +224,7 @@ kubectl apply -k k8s
 
 - Put the manager behind HTTPS and set `SECURE_COOKIES=true`
 - Set a strong `SESSION_SECRET` and `ADMIN_API_TOKEN`
+- Use `PUBLIC_LAUNCH_TOKEN_TTL` to control how long shared app links stay valid
 - Keep `ALLOW_CUSTOM_APPS=false` unless you trust the admins
 - Curate `config/apps.json` — don't let users supply arbitrary binaries
 - Restrict the Docker socket to the manager only

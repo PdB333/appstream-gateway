@@ -14,12 +14,7 @@ function fromBase64Url(value) {
   return Buffer.from(padded, "base64");
 }
 
-export function signSessionToken(secret, sessionId, ttlMs) {
-  const payload = {
-    sessionId,
-    exp: Date.now() + ttlMs,
-  };
-
+function signPayload(secret, payload) {
   const encodedPayload = toBase64Url(JSON.stringify(payload));
   const signature = crypto
     .createHmac("sha256", secret)
@@ -29,9 +24,9 @@ export function signSessionToken(secret, sessionId, ttlMs) {
   return `${encodedPayload}.${toBase64Url(signature)}`;
 }
 
-export function verifySessionToken(secret, token, expectedSessionId) {
+function verifyPayload(secret, token) {
   if (!token || !token.includes(".")) {
-    return false;
+    return null;
   }
 
   const [encodedPayload, encodedSignature] = token.split(".", 2);
@@ -45,19 +40,70 @@ export function verifySessionToken(secret, token, expectedSessionId) {
     providedSignature.length !== expectedSignature.length ||
     !crypto.timingSafeEqual(providedSignature, expectedSignature)
   ) {
-    return false;
+    return null;
   }
 
-  let payload;
   try {
-    payload = JSON.parse(fromBase64Url(encodedPayload).toString("utf8"));
+    return JSON.parse(fromBase64Url(encodedPayload).toString("utf8"));
   } catch {
+    return null;
+  }
+}
+
+export function signSessionToken(secret, sessionId, ttlMs) {
+  const payload = {
+    kind: "session",
+    sessionId,
+    exp: Date.now() + ttlMs,
+  };
+
+  return signPayload(secret, payload);
+}
+
+export function verifySessionToken(secret, token, expectedSessionId) {
+  const payload = verifyPayload(secret, token);
+  if (!payload || payload.kind !== "session") {
     return false;
   }
 
-  if (!payload || payload.sessionId !== expectedSessionId) {
+  if (payload.sessionId !== expectedSessionId) {
     return false;
   }
 
   return Number.isFinite(payload.exp) && payload.exp > Date.now();
+}
+
+export function signLaunchToken(secret, appId, clientId, ttlMs) {
+  const payload = {
+    kind: "launch",
+    appId,
+    clientId,
+    exp: Date.now() + ttlMs,
+  };
+
+  return signPayload(secret, payload);
+}
+
+export function verifyLaunchToken(secret, token, expectedAppId = "") {
+  const payload = verifyPayload(secret, token);
+  if (!payload || payload.kind !== "launch") {
+    return null;
+  }
+
+  if (expectedAppId && payload.appId !== expectedAppId) {
+    return null;
+  }
+
+  if (!Number.isFinite(payload.exp) || payload.exp <= Date.now()) {
+    return null;
+  }
+
+  if (typeof payload.clientId !== "string" || !payload.clientId.trim()) {
+    return null;
+  }
+
+  return {
+    appId: payload.appId,
+    clientId: payload.clientId,
+  };
 }
