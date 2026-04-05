@@ -32,7 +32,6 @@ XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-${APP_USER}}"
 LOG_DIR="${LOG_DIR:-/tmp/app-web-logs}"
 XAUTHORITY="${XAUTHORITY:-${SESSION_HOME}/.Xauthority}"
 APP_WINDOW_MODE="${APP_WINDOW_MODE:-auto}"
-APP_WINDOW_ELECTRON_FLAGS="${APP_WINDOW_ELECTRON_FLAGS:---kiosk --no-first-run --disable-infobars}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/appimage-launch.sh
@@ -651,30 +650,6 @@ resolve_launch_spec() {
   esac
 
   resolve_window_mode "${window_probe}"
-  if [[ "${RESOLVED_WINDOW_MODE}" == "electron" ]]; then
-    case "${APP_SOURCE_TYPE}" in
-      command)
-        RESOLVED_COMMAND="${APP_RUN_COMMAND} ${APP_WINDOW_ELECTRON_FLAGS} ${APP_ARGS}"
-        ;;
-      binary-path)
-        printf -v quoted_path '%q' "${APP_SOURCE_PATH}"
-        RESOLVED_COMMAND="${quoted_path} ${APP_WINDOW_ELECTRON_FLAGS} ${APP_ARGS}"
-        ;;
-      appimage-file|appimage-url)
-        if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" && -n "${artifact_path:-}" && -d "${artifact_path}" ]]; then
-          printf -v quoted_dir '%q' "${artifact_path}"
-          RESOLVED_COMMAND="APPDIR=${quoted_dir} ./AppRun ${APP_WINDOW_ELECTRON_FLAGS} ${APP_ARGS}"
-        else
-          printf -v quoted_path '%q' "${artifact_path}"
-          RESOLVED_COMMAND="${quoted_path} ${APP_WINDOW_ELECTRON_FLAGS} ${APP_ARGS}"
-        fi
-        ;;
-      archive-url)
-        printf -v quoted_path '%q' "${archive_dir}/${APP_ARCHIVE_ENTRYPOINT}"
-        RESOLVED_COMMAND="${quoted_path} ${APP_WINDOW_ELECTRON_FLAGS} ${APP_ARGS}"
-        ;;
-    esac
-  fi
 }
 
 write_app_script() {

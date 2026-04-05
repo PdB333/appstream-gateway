@@ -47,8 +47,11 @@ main() {
   resolve_launch_spec
 
   assert_contains "${RESOLVED_WINDOW_MODE}" "electron" "VSCodium should resolve to electron window mode"
-  assert_contains "${RESOLVED_COMMAND}" "--kiosk" "Electron apps should receive kiosk flags"
   assert_contains "${RESOLVED_COMMAND}" "VSCodium" "resolved command should still launch the app"
+  if [[ "${RESOLVED_COMMAND}" == *"--kiosk"* ]]; then
+    echo "ASSERTION FAILED: electron mode should not inject kiosk CLI flags" >&2
+    exit 1
+  fi
 
   start_window_layout_agent
   local window_agent_script
