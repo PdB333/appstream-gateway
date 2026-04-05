@@ -31,7 +31,8 @@ FILE_BRIDGE_PORT="${FILE_BRIDGE_PORT:-9091}"
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-${APP_USER}}"
 LOG_DIR="${LOG_DIR:-/tmp/app-web-logs}"
 XAUTHORITY="${XAUTHORITY:-${SESSION_HOME}/.Xauthority}"
-APP_WINDOW_MODE="${APP_WINDOW_MODE:-immersive}"
+APP_WINDOW_MODE="${APP_WINDOW_MODE:-auto}"
+APP_WINDOW_ELECTRON_FLAGS="${APP_WINDOW_ELECTRON_FLAGS:---kiosk --no-first-run --disable-infobars}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/appimage-launch.sh
@@ -41,6 +42,7 @@ declare -a pids=()
 xpra_pid=""
 RESOLVED_COMMAND=""
 RESOLVED_WORKDIR=""
+RESOLVED_WINDOW_MODE=""
 
 json_escape() {
   local value=${1-}
@@ -73,6 +75,72 @@ is_enabled() {
     1|true|TRUE|yes|YES|on|ON) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+to_lower() {
+  printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]'
+}
+
+looks_like_electron_name() {
+  case "$(to_lower "${1:-}")" in
+    *electron*|*vscodium*|*codium*|*lens*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+looks_like_electron_artifact() {
+  local candidate=${1:-}
+
+  if [[ -z "${candidate}" ]]; then
+    return 1
+  fi
+
+  if [[ -d "${candidate}" ]]; then
+    if find "${candidate}" -maxdepth 4 \( -name 'app.asar' -o -name 'chrome-sandbox' -o -name 'electron' -o -name 'electron.exe' \) -print -quit 2>/dev/null | grep -q .; then
+      return 0
+    fi
+    if find "${candidate}" -maxdepth 4 -type f \( -iname '*electron*' -o -iname '*codium*' -o -iname '*lens*' \) -print -quit 2>/dev/null | grep -q .; then
+      return 0
+    fi
+    return 1
+  fi
+
+  if [[ -f "${candidate}" ]]; then
+    if file -b "${candidate}" 2>/dev/null | grep -qi 'electron'; then
+      return 0
+    fi
+    if file -b "${candidate}" 2>/dev/null | grep -qi 'ELF'; then
+      if grep -a -qi 'electron' "${candidate}" 2>/dev/null; then
+        return 0
+      fi
+    fi
+  fi
+
+  return 1
+}
+
+resolve_window_mode() {
+  local probe=${1:-}
+  local requested
+
+  requested="$(to_lower "${APP_WINDOW_MODE}")"
+  case "${requested}" in
+    auto)
+      if looks_like_electron_name "${APP_NAME}" || looks_like_electron_name "${APP_RUN_COMMAND}" || looks_like_electron_name "${probe}" || looks_like_electron_artifact "${probe}"; then
+        RESOLVED_WINDOW_MODE="electron"
+      else
+        RESOLVED_WINDOW_MODE="immersive"
+      fi
+      ;;
+    electron|immersive)
+      RESOLVED_WINDOW_MODE="${requested}"
+      ;;
+    *)
+      RESOLVED_WINDOW_MODE="immersive"
+      ;;
+  esac
+
+  emit_log "info" "window_mode" "Resolved window mode: ${RESOLVED_WINDOW_MODE}"
 }
 
 cleanup() {
@@ -499,7 +567,7 @@ emit_launch_stage() {
 }
 
 resolve_launch_spec() {
-  local artifact_path archive_dir quoted_path
+  local artifact_path archive_dir quoted_path window_probe=""
 
   RESOLVED_WORKDIR="${APP_WORKDIR}"
 
@@ -511,6 +579,7 @@ resolve_launch_spec() {
       fi
       emit_launch_stage "resolve command launch"
       RESOLVED_COMMAND="${APP_RUN_COMMAND} ${APP_ARGS}"
+      window_probe="${APP_RUN_COMMAND}"
       ;;
     binary-path)
       if [[ -z "${APP_SOURCE_PATH}" ]]; then
@@ -520,6 +589,7 @@ resolve_launch_spec() {
       emit_launch_stage "resolve binary launch"
       printf -v quoted_path '%q' "${APP_SOURCE_PATH}"
       RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
+      window_probe="${APP_SOURCE_PATH}"
       ;;
     appimage-file)
       if [[ -z "${APP_SOURCE_PATH}" ]]; then
@@ -528,6 +598,7 @@ resolve_launch_spec() {
       fi
       emit_launch_stage "resolve appimage launch"
       artifact_path="$(prepare_appimage "${APP_SOURCE_PATH}")"
+      window_probe="${artifact_path}"
       if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" && -d "${artifact_path}" ]]; then
         RESOLVED_WORKDIR="${artifact_path}"
         printf -v quoted_dir '%q' "${artifact_path}"
@@ -546,6 +617,7 @@ resolve_launch_spec() {
       artifact_path="$(download_artifact "${APP_SOURCE_URL}" "${APP_SHA256}" ".AppImage")"
       emit_launch_stage "prepare appimage"
       artifact_path="$(prepare_appimage "${artifact_path}")"
+      window_probe="${artifact_path}"
       if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" && -d "${artifact_path}" ]]; then
         RESOLVED_WORKDIR="${artifact_path}"
         printf -v quoted_dir '%q' "${artifact_path}"
@@ -564,6 +636,7 @@ resolve_launch_spec() {
       artifact_path="$(download_artifact "${APP_SOURCE_URL}" "${APP_SHA256}" ".archive")"
       emit_launch_stage "extract archive"
       archive_dir="$(prepare_archive "${artifact_path}")"
+      window_probe="${archive_dir}/${APP_ARCHIVE_ENTRYPOINT}"
       if [[ -z "${RESOLVED_WORKDIR}" ]]; then
         RESOLVED_WORKDIR="${archive_dir}"
       fi
@@ -576,6 +649,32 @@ resolve_launch_spec() {
       return 1
       ;;
   esac
+
+  resolve_window_mode "${window_probe}"
+  if [[ "${RESOLVED_WINDOW_MODE}" == "electron" ]]; then
+    case "${APP_SOURCE_TYPE}" in
+      command)
+        RESOLVED_COMMAND="${APP_RUN_COMMAND} ${APP_WINDOW_ELECTRON_FLAGS} ${APP_ARGS}"
+        ;;
+      binary-path)
+        printf -v quoted_path '%q' "${APP_SOURCE_PATH}"
+        RESOLVED_COMMAND="${quoted_path} ${APP_WINDOW_ELECTRON_FLAGS} ${APP_ARGS}"
+        ;;
+      appimage-file|appimage-url)
+        if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" && -n "${artifact_path:-}" && -d "${artifact_path}" ]]; then
+          printf -v quoted_dir '%q' "${artifact_path}"
+          RESOLVED_COMMAND="APPDIR=${quoted_dir} ./AppRun ${APP_WINDOW_ELECTRON_FLAGS} ${APP_ARGS}"
+        else
+          printf -v quoted_path '%q' "${artifact_path}"
+          RESOLVED_COMMAND="${quoted_path} ${APP_WINDOW_ELECTRON_FLAGS} ${APP_ARGS}"
+        fi
+        ;;
+      archive-url)
+        printf -v quoted_path '%q' "${archive_dir}/${APP_ARCHIVE_ENTRYPOINT}"
+        RESOLVED_COMMAND="${quoted_path} ${APP_WINDOW_ELECTRON_FLAGS} ${APP_ARGS}"
+        ;;
+    esac
+  fi
 }
 
 write_app_script() {
@@ -682,7 +781,7 @@ start_xvfb() {
 }
 
 start_window_manager() {
-  if [[ "${APP_WINDOW_MODE}" != "immersive" ]]; then
+  if [[ "${RESOLVED_WINDOW_MODE:-immersive}" != "immersive" ]]; then
     return
   fi
 
@@ -704,7 +803,7 @@ set_root_background() {
 }
 
 start_window_layout_agent() {
-  if [[ "${APP_WINDOW_MODE}" != "immersive" ]]; then
+  if [[ "${RESOLVED_WINDOW_MODE:-immersive}" != "immersive" ]]; then
     return
   fi
 
@@ -908,6 +1007,11 @@ main() {
   start_dbus
   start_xpra_server
   wait_for_display || emit_log "warn" "display_not_ready" "Continuing despite display readiness check failure"
+  if [[ "${RESOLVED_WINDOW_MODE}" == "immersive" ]]; then
+    start_window_manager
+    set_root_background
+    start_window_layout_agent
+  fi
   wait_for_port 127.0.0.1 "${PORT}"
   start_file_bridge
   wait_for_port 127.0.0.1 "${FILE_BRIDGE_PORT}"
