@@ -233,6 +233,7 @@ kubectl apply -k k8s
 - Set a strong `SESSION_SECRET` and `ADMIN_API_TOKEN`
 - Use `SESSION_READY_TIMEOUT=5m` or higher if heavier apps need more startup time
 - Use `SESSION_DPI=96` by default; raise it only if you want larger UI scaling
+- Use `APP_UI_MODE=kiosk` on apps that should open with the HUD hidden by default
 - Use `PUBLIC_LAUNCH_TOKEN_TTL` to control how long shared app links stay valid
 - Set `PUBLIC_BASE_URL` to the bastion-facing URL when you want generated permalinks to point at the public entrypoint
 - Use `DEFAULT_STORAGE_MODE` and per-app `storage.mode` together to decide whether new sessions are ephemeral, per-client, or shared-app

@@ -16,6 +16,15 @@
             --hud-blur: blur(12px);
         }
 
+        html.kiosk-mode #hud,
+        html.kiosk-mode #hudToggle {
+            display: none !important;
+        }
+
+        html.kiosk-mode body {
+            cursor: none;
+        }
+
         html, body {
             margin: 0;
             width: 100%;
@@ -305,6 +314,12 @@
         const sessionMatch = window.location.pathname.match(/^\/sessions\/([a-z0-9]+)/);
         const sessionId = sessionMatch ? sessionMatch[1] : "";
         const sessionToken = new URL(window.location.href).searchParams.get("token") || "";
+        const uiMode = String(readQueryVariable("ui_mode", "")).trim().toLowerCase();
+        const kioskMode = uiMode === "kiosk";
+
+        if (kioskMode) {
+            document.documentElement.classList.add("kiosk-mode");
+        }
 
         // â”€â”€ Storage keys â”€â”€
         const keys = {
@@ -315,7 +330,7 @@
         };
 
         // â”€â”€ HUD visibility â”€â”€
-        let hudVisible = localStorage.getItem(keys.hudVisible) !== "0";
+        let hudVisible = kioskMode ? false : localStorage.getItem(keys.hudVisible) !== "0";
 
         function setHudVisible(visible) {
             hudVisible = visible;
@@ -427,6 +442,13 @@
             setTimeout(() => window.location.reload(), readNumberQuery("reconnect_delay", 1000));
         }
 
+        function requestFullscreenIfNeeded() {
+            if (!kioskMode || document.fullscreenElement) {
+                return;
+            }
+            document.documentElement.requestFullscreen().catch(() => {});
+        }
+
         function refreshViewportScale() {
             if (!rfb || typeof rfb._windowResize !== "function") return;
             const apply = () => rfb._windowResize();
@@ -490,6 +512,7 @@
             setStatus(label, "connected", true);
             focusCanvas();
             refreshViewportScale();
+            requestFullscreenIfNeeded();
         }
 
         function disconnectedFromServer() {
@@ -521,7 +544,13 @@
             refreshViewportScale();
         });
 
-        // â”€â”€ Keyboard shortcuts â”€â”€
+        if (kioskMode) {
+            window.addEventListener("pointerdown", requestFullscreenIfNeeded, { once: true, capture: true, passive: true });
+            window.addEventListener("keydown", requestFullscreenIfNeeded, { once: true, capture: true });
+            setHudVisible(false);
+        }
+
+        // ?? Keyboard shortcuts ??
         // Capture at window level during capture phase so it fires BEFORE noVNC grabs the event
         window.addEventListener("keydown", (e) => {
             // Ctrl+Alt+Shift+C = toggle HUD

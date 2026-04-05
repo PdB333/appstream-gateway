@@ -1424,6 +1424,11 @@ function serializeSession(session, request, extra = {}) {
   const launchDurationMs =
     session.timings.launchDurationMs ||
     (session.timings.readyAt ? session.timings.readyAt - session.timings.createStartedAt : 0);
+  const sessionUrl = new URL(`/sessions/${session.id}/`, baseUrl);
+  sessionUrl.searchParams.set("token", accessToken);
+  if (session.app?.env?.APP_UI_MODE === "kiosk") {
+    sessionUrl.searchParams.set("ui_mode", "kiosk");
+  }
 
   return {
     id: session.id,
@@ -1435,7 +1440,7 @@ function serializeSession(session, request, extra = {}) {
     createdAt: msToIso(session.createdAt),
     lastActivityAt: msToIso(session.lastActivityAt),
     expiresAt: msToIso(computeExpiry(session.lastActivityAt, session.sessionTtlMs)),
-    url: `${baseUrl}/sessions/${session.id}/?token=${encodeURIComponent(accessToken)}`,
+    url: sessionUrl.toString(),
     launchDurationMs,
     pendingDurationMs: session.timings.pendingDurationMs,
     runningDurationMs: session.timings.runningDurationMs,

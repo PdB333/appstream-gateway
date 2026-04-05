@@ -24,3 +24,10 @@ test("firefox prelaunch command clears stale profile locks", async () => {
     /find \/data\/home\/\.mozilla\/firefox .*parentlock/i
   );
 });
+
+test("desktop apps opt into kiosk UI mode", async () => {
+  const catalog = await loadCatalog(new URL("../../config/apps.json", import.meta.url), defaults);
+
+  assert.equal(catalog.get("vscodium")?.env?.APP_UI_MODE, "kiosk");
+  assert.equal(catalog.get("lens")?.env?.APP_UI_MODE, "kiosk");
+});
