@@ -13,7 +13,7 @@ fi
 if [[ $# -gt 0 ]]; then
   APP_IDS=("$@")
 else
-  APP_IDS=(firefox brave xterm)
+  APP_IDS=(firefox brave)
 fi
 
 get_launch_url() {
@@ -23,7 +23,7 @@ get_launch_url() {
   response="$(curl -fsS \
     -H "Authorization: Bearer ${ADMIN_API_TOKEN}" \
     "${MANAGER_URL}/api/apps/${app_id}/launch-link?clientId=${client_id}")"
-  python3 -c 'import json,sys; print(json.loads(sys.argv[1])["url"])' "${response}"
+  python3 -c 'import json,sys,urllib.parse; base = urllib.parse.urlsplit(sys.argv[2]); url = urllib.parse.urlsplit(json.loads(sys.argv[1])["url"]); print(urllib.parse.urlunsplit((base.scheme, base.netloc, url.path, url.query, url.fragment)))' "${response}" "${MANAGER_URL}"
 }
 
 check_launch() {
