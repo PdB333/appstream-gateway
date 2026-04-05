@@ -26,6 +26,7 @@ PORT="${PORT:-8080}"
 SCREEN_WIDTH="${SCREEN_WIDTH:-1440}"
 SCREEN_HEIGHT="${SCREEN_HEIGHT:-900}"
 SCREEN_DEPTH="${SCREEN_DEPTH:-24}"
+SCREEN_DPI="${SCREEN_DPI:-192}"
 FILE_BRIDGE_PORT="${FILE_BRIDGE_PORT:-9091}"
 XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-${APP_USER}}"
 LOG_DIR="${LOG_DIR:-/tmp/app-web-logs}"
@@ -663,7 +664,7 @@ start_xvfb() {
   runuser -u "${APP_USER}" -- env DISPLAY="${DISPLAY}" HOME="${SESSION_HOME}" XAUTHORITY="${XAUTHORITY}" Xvfb "${DISPLAY}" \
     -screen 0 "${xvfb_width}x${xvfb_height}x${SCREEN_DEPTH}" \
     +extension RANDR +extension GLX \
-    -dpi 96 \
+    -dpi "${SCREEN_DPI}" \
     -ac -nolisten tcp >>"${LOG_DIR}/xvfb.log" 2>&1 &
   pids+=("$!")
 }
@@ -824,7 +825,7 @@ build_xpra_args() {
     "--bind-tcp=0.0.0.0:${PORT}"
     "--html=on"
     "--daemon=no"
-    "--dpi=96"
+    "--dpi=${SCREEN_DPI}"
     "--resize-display=yes"
     "--exit-with-children=yes"
     "--clipboard=yes"
