@@ -781,10 +781,6 @@ start_xvfb() {
 }
 
 start_window_manager() {
-  if [[ "${RESOLVED_WINDOW_MODE:-immersive}" != "immersive" ]]; then
-    return
-  fi
-
   emit_log "info" "openbox_start" "Starting openbox"
   runuser -u "${APP_USER}" -- env \
     DISPLAY="${DISPLAY}" \
@@ -803,11 +799,7 @@ set_root_background() {
 }
 
 start_window_layout_agent() {
-  if [[ "${RESOLVED_WINDOW_MODE:-immersive}" != "immersive" ]]; then
-    return
-  fi
-
-  emit_log "info" "window_agent_start" "Starting immersive window layout agent"
+  emit_log "info" "window_agent_start" "Starting window layout agent"
 
   cat > /tmp/window-layout-agent.sh <<EOF
 #!/usr/bin/env bash
@@ -816,6 +808,7 @@ export DISPLAY="${DISPLAY}"
 export HOME="${SESSION_HOME}"
 export XAUTHORITY="${XAUTHORITY}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR}"
+window_behavior="${RESOLVED_WINDOW_MODE:-immersive}"
 fallback_width="${SCREEN_WIDTH}"
 fallback_height="${SCREEN_HEIGHT}"
 
@@ -852,8 +845,13 @@ while true; do
     fi
 
     xprop -id "\${window_id}" -f _MOTIF_WM_HINTS 32c -set _MOTIF_WM_HINTS "2, 0, 0, 0, 0" >/dev/null 2>&1 || true
-    wmctrl -i -r "\${window_id}" -b add,maximized_vert,maximized_horz >/dev/null 2>&1 || true
-    wmctrl -i -r "\${window_id}" -e "0,0,0,\${screen_width},\${screen_height}" >/dev/null 2>&1 || true
+    if [[ "\${window_behavior}" == "electron" ]]; then
+      wmctrl -i -r "\${window_id}" -b add,fullscreen >/dev/null 2>&1 || true
+      wmctrl -i -r "\${window_id}" -e "0,0,0,\${screen_width},\${screen_height}" >/dev/null 2>&1 || true
+    else
+      wmctrl -i -r "\${window_id}" -b add,maximized_vert,maximized_horz >/dev/null 2>&1 || true
+      wmctrl -i -r "\${window_id}" -e "0,0,0,\${screen_width},\${screen_height}" >/dev/null 2>&1 || true
+    fi
     wmctrl -i -a "\${window_id}" >/dev/null 2>&1 || true
     handled_windows["\${window_id}"]=1
   done < <(wmctrl -lx 2>/dev/null)

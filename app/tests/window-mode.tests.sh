@@ -20,9 +20,11 @@ main() {
   export APP_SESSION_ID="test-session"
   export SESSION_HOME="/tmp/window-mode-test-home"
   export XDG_RUNTIME_DIR="/tmp/window-mode-test-runtime"
+  export LOG_DIR="/tmp/window-mode-test-logs"
   export DISPLAY=":100"
   export PORT="1234"
   export FILE_BRIDGE_PORT="9091"
+  mkdir -p "${LOG_DIR}"
 
   # shellcheck source=../entrypoint.sh
   source "${ROOT_DIR}/entrypoint.sh"
@@ -47,6 +49,11 @@ main() {
   assert_contains "${RESOLVED_WINDOW_MODE}" "electron" "VSCodium should resolve to electron window mode"
   assert_contains "${RESOLVED_COMMAND}" "--kiosk" "Electron apps should receive kiosk flags"
   assert_contains "${RESOLVED_COMMAND}" "VSCodium" "resolved command should still launch the app"
+
+  start_window_layout_agent
+  local window_agent_script
+  window_agent_script="$(cat /tmp/window-layout-agent.sh)"
+  assert_contains "${window_agent_script}" "fullscreen" "Electron mode should force fullscreen window management"
 
   export APP_RUN_COMMAND="xterm"
   export APP_NAME="Terminal"
