@@ -444,12 +444,13 @@ prepare_appimage() {
 
 prepare_archive() {
   local archive_path=$1
-  local cache_key extract_dir
+  local cache_key extract_dir entrypoint_path
 
   cache_key="$(printf '%s' "${archive_path}:${APP_ARCHIVE_ENTRYPOINT}:${APP_ARCHIVE_STRIP_COMPONENTS}" | sha256sum | awk '{print $1}')"
   extract_dir="${APP_CACHE_DIR}/extract-${cache_key}"
+  entrypoint_path="${extract_dir}/${APP_ARCHIVE_ENTRYPOINT}"
 
-  if [[ ! -d "${extract_dir}" ]]; then
+  extract_archive_once() {
     mkdir -p "${extract_dir}"
     emit_log "info" "archive_extract_start" "Extracting archive ${archive_path}"
 
@@ -472,6 +473,21 @@ prepare_archive() {
         return 1
         ;;
     esac
+  }
+
+  if [[ ! -d "${extract_dir}" ]]; then
+    extract_archive_once
+  fi
+
+  if [[ ! -x "${entrypoint_path}" ]]; then
+    emit_log "warn" "archive_entrypoint_missing" "Archive entrypoint missing at ${entrypoint_path}, rebuilding cache"
+    rm -rf "${extract_dir}"
+    extract_archive_once
+  fi
+
+  if [[ ! -x "${entrypoint_path}" ]]; then
+    emit_log "error" "archive_entrypoint_invalid" "Archive entrypoint still missing or not executable at ${entrypoint_path}"
+    return 1
   fi
 
   printf '%s' "${extract_dir}"

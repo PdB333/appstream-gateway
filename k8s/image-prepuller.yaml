@@ -17,8 +17,8 @@ spec:
       imagePullSecrets:
         - name: ghcr-creds
       initContainers:
-        - name: pull-session-image
-          image: ghcr.io/pdb333/appstream-gateway-session:20260404-xpra11
+          - name: pull-session-image
+            image: ghcr.io/pdb333/appstream-gateway-session:20260405-xpra12
           imagePullPolicy: IfNotPresent
           command: ["/bin/sh", "-lc", "true"]
         - name: pull-manager-image
