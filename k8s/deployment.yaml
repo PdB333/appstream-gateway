@@ -20,7 +20,7 @@ spec:
         - name: ghcr-creds
       containers:
         - name: manager
-          image: ghcr.io/pdb333/appstream-gateway-manager:20260405-permalink2
+          image: ghcr.io/pdb333/appstream-gateway-manager:20260405-permalink3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
@@ -35,7 +35,7 @@ spec:
             - name: SESSION_BACKEND
               value: kubernetes
             - name: SESSION_IMAGE
-              value: ghcr.io/pdb333/appstream-gateway-session:20260405-xpra14
+              value: ghcr.io/pdb333/appstream-gateway-session:20260405-xpra15
             - name: K8S_NAMESPACE
               valueFrom:
                 fieldRef:

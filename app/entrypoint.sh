@@ -494,6 +494,10 @@ prepare_archive() {
   printf '%s' "${extract_dir}"
 }
 
+emit_launch_stage() {
+  emit_log "info" "launch_stage" "$1"
+}
+
 resolve_launch_spec() {
   local artifact_path archive_dir quoted_path
 
@@ -505,6 +509,7 @@ resolve_launch_spec() {
         emit_log "error" "launch_spec_invalid" "APP_RUN_COMMAND is required for command sources"
         return 1
       fi
+      emit_launch_stage "resolve command launch"
       RESOLVED_COMMAND="${APP_RUN_COMMAND} ${APP_ARGS}"
       ;;
     binary-path)
@@ -512,6 +517,7 @@ resolve_launch_spec() {
         emit_log "error" "launch_spec_invalid" "APP_SOURCE_PATH is required for binary-path sources"
         return 1
       fi
+      emit_launch_stage "resolve binary launch"
       printf -v quoted_path '%q' "${APP_SOURCE_PATH}"
       RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
       ;;
@@ -520,6 +526,7 @@ resolve_launch_spec() {
         emit_log "error" "launch_spec_invalid" "APP_SOURCE_PATH is required for appimage-file sources"
         return 1
       fi
+      emit_launch_stage "resolve appimage launch"
       artifact_path="$(prepare_appimage "${APP_SOURCE_PATH}")"
       if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" && -d "${artifact_path}" ]]; then
         RESOLVED_WORKDIR="${artifact_path}"
@@ -535,7 +542,9 @@ resolve_launch_spec() {
         emit_log "error" "launch_spec_invalid" "APP_SOURCE_URL is required for appimage-url sources"
         return 1
       fi
+      emit_launch_stage "download appimage"
       artifact_path="$(download_artifact "${APP_SOURCE_URL}" "${APP_SHA256}" ".AppImage")"
+      emit_launch_stage "prepare appimage"
       artifact_path="$(prepare_appimage "${artifact_path}")"
       if [[ "${APPIMAGE_EXTRACT_AND_RUN}" == "1" && -d "${artifact_path}" ]]; then
         RESOLVED_WORKDIR="${artifact_path}"
@@ -551,11 +560,14 @@ resolve_launch_spec() {
         emit_log "error" "launch_spec_invalid" "APP_SOURCE_URL and APP_ARCHIVE_ENTRYPOINT are required for archive-url sources"
         return 1
       fi
+      emit_launch_stage "download archive"
       artifact_path="$(download_artifact "${APP_SOURCE_URL}" "${APP_SHA256}" ".archive")"
+      emit_launch_stage "extract archive"
       archive_dir="$(prepare_archive "${artifact_path}")"
       if [[ -z "${RESOLVED_WORKDIR}" ]]; then
         RESOLVED_WORKDIR="${archive_dir}"
       fi
+      emit_launch_stage "build archive launch command"
       printf -v quoted_path '%q' "${archive_dir}/${APP_ARCHIVE_ENTRYPOINT}"
       RESOLVED_COMMAND="${quoted_path} ${APP_ARGS}"
       ;;

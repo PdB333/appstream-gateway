@@ -15,6 +15,7 @@ import { loadCatalog, normalizeApp } from "./catalog.js";
 import { DockerClient, DockerError } from "./docker-api.js";
 import { KubernetesClient } from "./kubernetes-api.js";
 import { createEventStore, createLogger } from "./logger.js";
+import { buildStartupFailureMessage, extractLaunchStage } from "./startup-failure.js";
 import { resolveStorage } from "./storage.js";
 import {
   createSessionTimings,
@@ -717,13 +718,6 @@ async function getStartupFailureLogTail(containerId) {
   return parts.join("\n");
 }
 
-function buildStartupFailureMessage(message, logTail) {
-  if (!logTail) {
-    return message;
-  }
-  return message + "\n\nLast container logs:\n" + logTail;
-}
-
 function summarizeLogTail(logs, maxLines = 20) {
   if (!logs) {
     return "";
@@ -757,6 +751,7 @@ async function createSession(app, { clientId }) {
     storage,
     events: [],
     reusedCount: 0,
+    launchStage: "",
     lastError: "",
     lastState: null,
     lastStats: null,
@@ -779,9 +774,11 @@ async function createSession(app, { clientId }) {
       containerId: session.containerId,
     });
 
+    session.launchStage = "start container";
     await runtimeClient.startContainer(session.containerId);
     recordSessionEvent(session, "info", "container_started", "Session runtime object started");
 
+    session.launchStage = "wait for readiness";
     await waitForSessionReady(session);
     session.status = "ready";
     finalizeSessionTimings(session.timings, Date.now());
@@ -798,9 +795,14 @@ async function createSession(app, { clientId }) {
     const startupFailureLogTail = session.containerId
       ? await getStartupFailureLogTail(session.containerId)
       : "";
+    const launchStage = extractLaunchStage(startupFailureLogTail);
+    if (launchStage) {
+      session.launchStage = launchStage;
+    }
     session.lastError = buildStartupFailureMessage(error.message, startupFailureLogTail);
     recordSessionEvent(session, "error", "session_failed", "Session startup failed", {
       message: error.message,
+      launchStage: session.launchStage || undefined,
       logTail: startupFailureLogTail || undefined,
     });
 
@@ -1437,6 +1439,7 @@ function serializeSession(session, request, extra = {}) {
     launchDurationMs,
     pendingDurationMs: session.timings.pendingDurationMs,
     runningDurationMs: session.timings.runningDurationMs,
+    launchStage: session.launchStage,
     storage: session.storage,
     reusedCount: session.reusedCount,
     lastError: session.lastError,
@@ -1488,12 +1491,13 @@ async function buildSessionDiagnostics(session, url) {
       createdAt: msToIso(session.createdAt),
       lastActivityAt: msToIso(session.lastActivityAt),
       sessionTtlMs: session.sessionTtlMs,
-        launchDurationMs: session.timings.launchDurationMs,
-        readinessProbeCount: session.timings.readinessProbeCount,
-        pendingDurationMs: session.timings.pendingDurationMs,
-        runningDurationMs: session.timings.runningDurationMs,
-        lastError: session.lastError,
-        reusedCount: session.reusedCount,
+      launchDurationMs: session.timings.launchDurationMs,
+      readinessProbeCount: session.timings.readinessProbeCount,
+      pendingDurationMs: session.timings.pendingDurationMs,
+      runningDurationMs: session.timings.runningDurationMs,
+      launchStage: session.launchStage,
+      lastError: session.lastError,
+      reusedCount: session.reusedCount,
     },
     app: serializeCatalogApp(session.app),
     runtime: {

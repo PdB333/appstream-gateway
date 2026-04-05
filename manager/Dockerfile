@@ -19,6 +19,7 @@ RUN find /app/src -type f -name "*.js" -exec perl -0pi -e 's/\r//g' {} + \
   && node --check /app/src/kubernetes-api.js \
   && node --check /app/src/catalog.js \
   && node --check /app/src/auth.js \
+  && node --check /app/src/startup-failure.js \
   && node --check /app/src/util.js \
   && node --check /app/src/logger.js
 

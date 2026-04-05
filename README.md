@@ -232,6 +232,7 @@ kubectl apply -k k8s
 - Put the manager behind HTTPS and set `SECURE_COOKIES=true`
 - Set a strong `SESSION_SECRET` and `ADMIN_API_TOKEN`
 - Use `SESSION_READY_TIMEOUT=5m` or higher if heavier apps need more startup time
+- Use `SESSION_DPI=192` to keep Xvfb and Xpra aligned on HiDPI screens
 - Use `PUBLIC_LAUNCH_TOKEN_TTL` to control how long shared app links stay valid
 - Set `PUBLIC_BASE_URL` to the bastion-facing URL when you want generated permalinks to point at the public entrypoint
 - Use `DEFAULT_STORAGE_MODE` and per-app `storage.mode` together to decide whether new sessions are ephemeral, per-client, or shared-app
@@ -241,6 +242,8 @@ kubectl apply -k k8s
 - Restrict the Docker socket to the manager only
 - Monitor and prune stale session containers and cache volumes
 - Scrape `/metrics` from Prometheus
+
+After a deploy, run `scripts/smoke-release.sh` with `ADMIN_API_TOKEN` to verify the launch path for a few representative apps before declaring the release done.
 
 ## Limits
 
