@@ -981,10 +981,10 @@ main() {
   start_dbus
   start_xpra_server
   wait_for_display || emit_log "warn" "display_not_ready" "Continuing despite display readiness check failure"
+  wait_for_port 127.0.0.1 "${PORT}" "$(( APP_READY_TIMEOUT_SECONDS * 2 ))"
   start_window_manager
   set_root_background
   start_window_layout_agent
-  wait_for_port 127.0.0.1 "${PORT}" "$(( APP_READY_TIMEOUT_SECONDS * 2 ))"
   start_file_bridge
   wait_for_port 127.0.0.1 "${FILE_BRIDGE_PORT}" "$(( APP_READY_TIMEOUT_SECONDS * 2 ))"
 
