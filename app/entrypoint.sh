@@ -33,6 +33,7 @@ LOG_DIR="${LOG_DIR:-/tmp/app-web-logs}"
 XAUTHORITY="${XAUTHORITY:-${SESSION_HOME}/.Xauthority}"
 APP_WINDOW_MODE="${APP_WINDOW_MODE:-auto}"
 APP_READY_TIMEOUT_SECONDS="${APP_READY_TIMEOUT_SECONDS:-30}"
+XPRA_ENCODING="${XPRA_ENCODING:-png}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/appimage-launch.sh
@@ -909,6 +910,7 @@ build_xpra_args() {
     "${DISPLAY}"
     "--bind-tcp=0.0.0.0:${PORT}"
     "--html=on"
+    "--encoding=${XPRA_ENCODING}"
     "--daemon=no"
     "--dpi=${SCREEN_DPI}"
     "--resize-display=yes"

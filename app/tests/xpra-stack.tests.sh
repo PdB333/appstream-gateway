@@ -36,6 +36,7 @@ main() {
   assert_contains "${joined}" ":100" "xpra command should use the configured display"
   assert_contains "${joined}" "--bind-tcp=0.0.0.0:1234" "xpra command should bind the session HTTP port"
   assert_contains "${joined}" "--html=on" "xpra command should expose the HTML5 client"
+  assert_contains "${joined}" "--encoding=png" "xpra command should use lossless color encoding"
   assert_contains "${joined}" "--dpi=96" "xpra command should force the configured DPI"
   assert_contains "${joined}" "--resize-display=yes" "xpra command should resize to the client viewport"
   assert_contains "${joined}" "--start-child=dbus-run-session -- /bin/bash /tmp/start-app.sh" "xpra command should launch the app child"
