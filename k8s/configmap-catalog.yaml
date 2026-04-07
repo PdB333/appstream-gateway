@@ -135,19 +135,20 @@ data:
         },
         "env": {
           "ELECTRON_DISABLE_SANDBOX": "1",
-          "ELECTRON_DISABLE_GPU": "1"
+          "ELECTRON_DISABLE_GPU": "1",
+          "APP_UI_MODE": "kiosk"
         }
       },
       {
         "id": "lens",
         "name": "Lens Desktop",
-        "description": "Kubernetes IDE delivered as an Electron AppImage.",
+        "description": "Lens-compatible open-source Kubernetes IDE (Freelens).",
         "featured": false,
         "categories": ["devops", "kubernetes"],
         "tags": ["electron", "k8s", "ide"],
         "source": {
           "type": "appimage-url",
-          "url": "https://api.k8slens.dev/binaries/Lens-2026.3.251250-latest.x86_64.AppImage",
+          "url": "https://github.com/freelensapp/freelens/releases/download/v1.8.1/Freelens-1.8.1-linux-amd64.AppImage",
           "sha256": ""
         },
         "launch": {
@@ -173,7 +174,8 @@ data:
         },
         "env": {
           "ELECTRON_DISABLE_SANDBOX": "1",
-          "ELECTRON_DISABLE_GPU": "1"
+          "ELECTRON_DISABLE_GPU": "1",
+          "APP_UI_MODE": "kiosk"
         }
       },
       {
