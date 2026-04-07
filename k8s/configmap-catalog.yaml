@@ -24,8 +24,8 @@ data:
           "healthcheckPath": "/"
         },
         "resources": {
-          "cpuCores": 0.5,
-          "memoryMb": 512
+          "cpuCores": 0.25,
+          "memoryMb": 256
         },
         "display": {
           "width": 1280,
@@ -54,8 +54,8 @@ data:
           "extractAndRun": false
         },
         "resources": {
-          "cpuCores": 0.25,
-          "memoryMb": 256
+          "cpuCores": 0.1,
+          "memoryMb": 128
         },
         "display": {
           "width": 1024,
@@ -84,8 +84,8 @@ data:
           "extractAndRun": false
         },
         "resources": {
-          "cpuCores": 0.25,
-          "memoryMb": 256
+          "cpuCores": 0.1,
+          "memoryMb": 128
         },
         "display": {
           "width": 1024,
@@ -119,8 +119,8 @@ data:
           "healthcheckPath": "/"
         },
         "resources": {
-          "cpuCores": 2,
-          "memoryMb": 4096
+          "cpuCores": 1.5,
+          "memoryMb": 3072
         },
         "display": {
           "width": 1440,
@@ -159,8 +159,8 @@ data:
           "healthcheckPath": "/"
         },
         "resources": {
-          "cpuCores": 2,
-          "memoryMb": 4096
+          "cpuCores": 1.5,
+          "memoryMb": 3072
         },
         "display": {
           "width": 1440,

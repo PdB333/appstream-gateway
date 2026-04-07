@@ -61,11 +61,11 @@ spec:
             - name: REAPER_INTERVAL
               value: 30s
             - name: SESSION_LOG_TAIL
-              value: "200"
+              value: "100"
             - name: MAX_MANAGER_EVENTS
-              value: "300"
+              value: "200"
             - name: MAX_SESSION_EVENTS
-              value: "120"
+              value: "80"
             - name: DEFAULT_STORAGE_MODE
               value: ephemeral
             - name: RESUME_SESSIONS
@@ -104,11 +104,11 @@ spec:
               drop: ["ALL"]
           resources:
             requests:
-              cpu: 250m
-              memory: 256Mi
+              cpu: 100m
+              memory: 128Mi
             limits:
-              cpu: "1"
-              memory: 1Gi
+              cpu: 500m
+              memory: 512Mi
       volumes:
         - name: catalog
           configMap:
