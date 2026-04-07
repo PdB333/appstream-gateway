@@ -136,7 +136,8 @@ data:
         "env": {
           "ELECTRON_DISABLE_SANDBOX": "1",
           "ELECTRON_DISABLE_GPU": "1",
-          "APP_UI_MODE": "kiosk"
+          "APP_UI_MODE": "kiosk",
+          "APP_READY_TIMEOUT_SECONDS": "120"
         }
       },
       {

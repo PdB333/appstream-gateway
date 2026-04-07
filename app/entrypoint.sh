@@ -32,6 +32,7 @@ XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp/runtime-${APP_USER}}"
 LOG_DIR="${LOG_DIR:-/tmp/app-web-logs}"
 XAUTHORITY="${XAUTHORITY:-${SESSION_HOME}/.Xauthority}"
 APP_WINDOW_MODE="${APP_WINDOW_MODE:-auto}"
+APP_READY_TIMEOUT_SECONDS="${APP_READY_TIMEOUT_SECONDS:-30}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=lib/appimage-launch.sh
@@ -983,9 +984,9 @@ main() {
   start_window_manager
   set_root_background
   start_window_layout_agent
-  wait_for_port 127.0.0.1 "${PORT}"
+  wait_for_port 127.0.0.1 "${PORT}" "$(( APP_READY_TIMEOUT_SECONDS * 2 ))"
   start_file_bridge
-  wait_for_port 127.0.0.1 "${FILE_BRIDGE_PORT}"
+  wait_for_port 127.0.0.1 "${FILE_BRIDGE_PORT}" "$(( APP_READY_TIMEOUT_SECONDS * 2 ))"
 
   emit_log "info" "session_ready" "Session services are ready"
   wait "${xpra_pid}" || exit_code=$?
